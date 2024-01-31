@@ -5,8 +5,9 @@
 * it as a CSV, and then will export a partial
 * as well for easy viewing in Excel. 
 * 
-* This assumes that you have the data file
+* This assumes that you have the files
 *   cps_00004.dat 
+*   cps_00004.xml
 * in the Downloads folder
 * 
 * 
