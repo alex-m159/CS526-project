@@ -849,6 +849,8 @@ ssc install listfirst
 export delimited using cps_00004.csv
 
 * Filter out records without federal tax and taxable income
-frame put if !missing(fedtax) & !missing(taxinc) in 1/1000, into(partial)
+frame put if !missing(fedtax) & !missing(taxinc), into(filtered)
+frame change filtered
+frame put in 1/1000, into(partial)
 frame change partial
 export delimited using cps_00004_partial.csv
