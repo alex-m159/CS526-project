@@ -1,0 +1,25 @@
+version: "3"
+
+services:
+  database:
+    image: hub.publichealthhq.xyz/pubhealth/database:latest
+    build:
+      context: ../
+      dockerfile: ops/Dockerfile.database
+    container_name: database
+    ports:
+      - "18123:8123"
+      - "19000:1900"
+    networks:
+      - pie
+    restart: on-failure
+    volumes:
+    - database-data:/var/lib/clickhouse
+
+# Network for web server and database to communicate over
+networks:
+  pie:
+    driver: bridge 
+
+volumes:
+  database-data: {}
