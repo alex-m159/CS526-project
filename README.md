@@ -6,6 +6,38 @@ IPUMS Datasets:
 https://cps.ipums.org/cps/index.shtml
 https://usa.ipums.org/usa/
 
+Suicide:
+https://catalog.data.gov/dataset/death-rates-for-suicide-by-sex-race-hispanic-origin-and-age-united-states-020c1
+
+Alzhiemer's and Aging:
+https://catalog.data.gov/dataset/alzheimers-disease-and-healthy-aging-data
+
+Leading Causes of Death:
+https://catalog.data.gov/dataset/nchs-leading-causes-of-death-united-states
+
+Life Expectency:
+https://catalog.data.gov/dataset/nchs-death-rates-and-life-expectancy-at-birth
+
+Human Well-Being Index:
+https://catalog.data.gov/dataset/human-well-being-index-hwbi-for-u-s-counties-2000-20101
+
+Behavioral Cardiovascular Risk Factor:
+https://catalog.data.gov/dataset/behavioral-risk-factor-surveillance-system-brfss-national-cardiovascular-disease-surveilla
+
+Hospital Provider Cost Report:
+https://catalog.data.gov/dataset/hospital-provider-cost-report
+
+Epidemiology Survey:
+https://catalog.data.gov/dataset/500-cities-city-level-data-gis-friendly-format-2019-release
+
+Rural-Urban Area Codes (Rural Areas based on Census Tract):
+https://catalog.data.gov/dataset/rural-urban-commuting-area-codes
+
+Rural-Urban Continuum Codes:
+https://catalog.data.gov/dataset/rural-urban-continuum-codes
+
+
+
 ## Limitations
 The NHIS source dataset does NOT offer publicly available data that have geographic information at granularity smaller than region of the US (Northeast, Midwest, etc.), so evaluations that relate a specific city/county with health outcomes are impossible with that dataset.
 

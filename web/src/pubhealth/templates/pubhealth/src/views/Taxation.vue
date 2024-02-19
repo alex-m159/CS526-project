@@ -1,0 +1,3 @@
+<template>
+    TAXATION VIEW
+</template>

@@ -42,12 +42,36 @@ CREATE TABLE cps_00004 (
     ) ENGINE = MergeTree();
 
 
+CREATE TABLE rural_urban_codes (
+    FIPS                    UInt64 PRIMARY KEY,
+    STATE_ABBREV            String,
+    COUNTY_NAME             String,
+    POP                     UInt32,
+    RUCC                    UInt8,
+    DESCR                   String
+) ENGINE = MergeTree();
+
+
+CREATE TABLE life_expectancy (
+    STATE_NAME                String,
+    COUNTY                    Nullable(String),
+    CENSUS_TRACT_NUMBER       Nullable(UInt32),
+    LIFE_EXPECTANCY           Nullable(Decimal(3, 1)),
+    LIFE_EXPECTANCY_RANGE     Nullable(String),
+    LIFE_EXPECTANCY_STD_ERR   Nullable(Decimal(5, 4)),
+) ENGINE = MergeTree();
+
+
 -- Clickhouse doesn't support SQL script files with multiple statements
 -- so to run this code and load in the CSV file, it's recommended to 
 -- run:
---  $ clickhouse client --query="<copy below SQL statement>" < cps_00004.csv
+--  $ clickhouse client --query="<copy below SQL statement>" < cps_00004_merged.csv
 --
 -- You'll also have to ensure that you have proper permissions in Clickhouse for
 -- the above command to work.
 INSERT INTO cps_00004.cps_00004 (ROWNUM, YEAR, SERIAL, MONTH, MONTH_NAME, CPSID, ASECFLAG, HFLAG, ASECWTH, STATEFIP, STATEFIP_NAME, STATECENSUS, COUNTY, METFIPS, METAREA, METAREA_NAME, METRO, METRO_NAME, INDIVIDCC, PERNUM, CPSIDV, CPSIDP, ASECWT, EDUC, EDUC_NAME, HIGRADE, HIGRADE_NAME, FTOTVAL, INCTOT, ADJGINC, FEDTAX, FEDTAXAC, MARGTAX, STATETAX, STATAXAC, TAXINC ) FORMAT CSV 
+
+INSERT INTO cps_00004.rural_urban_codes (FIPS, STATE_ABBREV, COUNTY_NAME, POP, RUCC, DESCR) FORMAT CSV
+
+INSERT INTO cps_00004.life_expectancy ( STATE_NAME, COUNTY, CENSUS_TRACT_NUMBER, LIFE_EXPECTANCY, LIFE_EXPECTANCY_RANGE, LIFE_EXPECTANCY_STD_ERR ) FORMAT CSV
 
