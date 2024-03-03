@@ -10,5 +10,5 @@
 #
 #
 
-source venv/bin/activate
-gunicorn pubhealth.pubhealth:app -k eventlet
+source ../venv/bin/activate
+gunicorn pubhealth.pubhealth:app -k eventlet -w 1

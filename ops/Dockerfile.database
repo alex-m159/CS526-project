@@ -3,5 +3,5 @@ FROM clickhouse/clickhouse-server:latest
 EXPOSE 8123
 EXPOSE 1900
 
-COPY database/setup.sql .
-COPY data/cps_00004_merged.csv .
+RUN apt-get update
+RUN apt-get install nano

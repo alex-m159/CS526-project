@@ -22,7 +22,7 @@
     let socket: Ref<Socket<ServerToClient, ClientToServer> | null> = ref(null);
     onMounted(() => {
       logger.debug("WebSocketExample Component Mounted")
-      socket.value = io("ws://localhost:5000/");
+      socket.value = io("ws://localhost:8000/");
       socket.value?.on("response", (data: any) => {
         console.log(`Data from SocketIO ${JSON.stringify(data)}`)
       })

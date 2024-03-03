@@ -53,13 +53,85 @@ CREATE TABLE rural_urban_codes (
 
 
 CREATE TABLE life_expectancy (
+    ROWNUM                    UInt32 PRIMARY KEY,
     STATE_NAME                String,
     COUNTY                    Nullable(String),
-    CENSUS_TRACT_NUMBER       Nullable(UInt32),
+    CENSUS_TRACT_NUMBER       Nullable(Decimal(6, 2)),
     LIFE_EXPECTANCY           Nullable(Decimal(3, 1)),
     LIFE_EXPECTANCY_RANGE     Nullable(String),
     LIFE_EXPECTANCY_STD_ERR   Nullable(Decimal(5, 4)),
 ) ENGINE = MergeTree();
+
+
+CREATE TABLE income_tax (
+    ROWNUM                    UInt32 PRIMARY KEY,
+    TAX_YEAR                  UInt16,
+    STATEFIPS                 UInt32,
+    STATE_ABBREV              String,
+    COUNTYFIP                 UInt32,
+    COUNTY_NAME               String,
+    AGI_STUB                  UInt8,
+    NUM_RETURNS               UInt64,       -- N1
+    ADJUSTED_GROSS_INCOME     Int64,        -- A00100
+    TAXES_PAID_AMOUNT         Int64,        -- A18300
+    TOTAL_TAX_PAYMENTS_AMOUNT Int64,        -- A10600
+    AVG_AGI_PER_FILER         Int64,        -- A00100 / N1
+    AVG_TAXES_PER_FILER       Int64         -- A18300 / N1
+) ENGINE = MergeTree();
+
+-- Year,StateAbbr,StateDesc,LocationName,DataSource,Category,Measure,Data_Value_Unit,Data_Value_Type,Data_Value,Data_Value_Footnote_Symbol,Data_Value_Footnote,Low_Confidence_Limit,High_Confidence_Limit,TotalPopulation,LocationID,CategoryID,MeasureId,DataValueTypeID,Short_Question_Text,Geolocation
+-- 2021,GA,Georgia,Ware,BRFSS,Health Outcomes,Stroke among adults aged >=18 years,%,Crude prevalence,4.6,,,4.0,5.1,36033,13299,HLTHOUT,STROKE,CrdPrv,Stroke,POINT (-82.4215072 31.050881)
+
+CREATE TABLE places_county (
+    ROWNUM                      UInt32 PRIMARY KEY,
+    YEAR                        UInt16,
+    STATE_ABBREV                String,
+    STATE_NAME                  String,
+    COUNTY_NAME                 String,
+    DATASOURCE                  String,
+    CATEGORY                    String,
+    MEASURE                     String,
+    DATA_VALUE_UNIT             String,
+    DATA_VALUE_TYPE             String,
+    DATA_VALUE                  Decimal(3, 1),
+    DATA_VALUE_FOOTNOTE_SYMBOL  Nullable(String),
+    DATA_VALUE_FOOTNOTE         Nullable(String),
+    LOW_CONFIDENCE_LIMIT        Decimal(3, 1),
+    HIGH_CONFIDENCE_LIMIT       Decimal(3, 1),
+    TOTAL_POPULATION            UInt32,
+    COUNTY_FIPS                 UInt32,
+    CATEGORY_ID                 String,
+    MEASURE_ID                  String,
+    DATA_VALUE_TYPE_ID          String,
+    SHORT_QUESTION_TEXT         String,
+    GEOLOCATION                 Point
+) ENGINE = MergeTree();
+
+CREATE TABLE premature_deaths (
+    ROWNUM                      UInt32 PRIMARY KEY,
+    STATE_FIPS                  UInt32,
+    STATE_NAME                  String,
+    YEAR_COLLECTED              UInt16,
+    YEARS_LOST_PER_100K         UInt32,
+)
+
+CREATE TABLE public_health_spending (
+    ROWNUM                      UInt32 PRIMARY KEY,
+    STATE_FIPS                  UInt32,
+    STATE_NAME                  String,
+    YEAR_COLLECTED              UInt16,
+    DOLLARS_PER_CAPITA          UInt32,
+)
+
+CREATE TABLE preventable_hospitalizations (
+    ROWNUM                      UInt32 PRIMARY KEY,
+    STATE_FIPS                  UInt32,
+    STATE_NAME                  String,
+    YEAR_COLLECTED              UInt16,
+    HOSPITALIZATIONS_PER_100K   UInt32,
+)
+
+
 
 
 -- Clickhouse doesn't support SQL script files with multiple statements
@@ -73,5 +145,5 @@ INSERT INTO cps_00004.cps_00004 (ROWNUM, YEAR, SERIAL, MONTH, MONTH_NAME, CPSID,
 
 INSERT INTO cps_00004.rural_urban_codes (FIPS, STATE_ABBREV, COUNTY_NAME, POP, RUCC, DESCR) FORMAT CSV
 
-INSERT INTO cps_00004.life_expectancy ( STATE_NAME, COUNTY, CENSUS_TRACT_NUMBER, LIFE_EXPECTANCY, LIFE_EXPECTANCY_RANGE, LIFE_EXPECTANCY_STD_ERR ) FORMAT CSV
+INSERT INTO cps_00004.life_expectancy ( ROWNUM, STATE_NAME, COUNTY, CENSUS_TRACT_NUMBER, LIFE_EXPECTANCY, LIFE_EXPECTANCY_RANGE, LIFE_EXPECTANCY_STD_ERR ) FORMAT CSV 
 
