@@ -36,6 +36,9 @@ https://catalog.data.gov/dataset/rural-urban-commuting-area-codes
 Rural-Urban Continuum Codes:
 https://catalog.data.gov/dataset/rural-urban-continuum-codes
 
+Income Tax:
+https://www.irs.gov/statistics/soi-tax-stats-county-data
+
 
 
 ## Limitations

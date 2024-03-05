@@ -33,12 +33,7 @@ def ws_respond(query, emit):
     clickhouse = clickhouse_connect.get_client(host='hub.publichealthhq.xyz', port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
     # clickhouse = clickhouse_connect.get_client(host='hub.publichealthhq.xyz', port=18123, username='default', password='Password123!')
     # clickhouse = clickhouse_connect.get_client(pool_mgr=pool_manager)
-    start = time.time()
     result = [ r for r in clickhouse.query(f"{query}").named_results()]
-    end = time.time()
-    print(f'DB result timing: {end - start}')
-    print('emitting results')
-    start = time.time()
     # with clickhouse.query_row_block_stream(f'{query}') as stream:
     block = []
     with clickhouse.query_rows_stream(f'{query}') as stream:
@@ -50,8 +45,16 @@ def ws_respond(query, emit):
                 emit('data', {'data': block})
                 block = []
             block.append(row)
-        end = time.time()
-        print(f'emit timing: {end - start}')
+
+def ws_respond_setup(query, emit): 
+    # Clickhouse does not support the execution of concurrent queries 
+    # on one client, and they recommend using one client per thread.
+    print('Running thread')
+    clickhouse = clickhouse_connect.get_client(host='hub.publichealthhq.xyz', port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
+    with clickhouse.query_row_block_stream(f'{query}') as stream:
+        for (i, block) in enumerate(stream):
+            emit('setup', {'data': block})
+
         
         
     
@@ -62,7 +65,19 @@ def ws_data(query):
     t = Thread(target=ws_respond, args=(query, emit)) 
     t.daemon = True
     t.run()
-    emit('message', 'test')
+
+
+@socketio.on('setup')
+def ws_setup(query):
+    """
+    A websocket endpoint dedicated to getting setup data for a component's initial setup.
+    It's exactly the same as ws_data in usage, but this makes it easy for the frontend
+    to distinguish between message types.
+    """
+    print('received setup query') 
+    t = Thread(target=ws_respond_setup, args=(query, emit)) 
+    t.daemon = True
+    t.run()
 
 
 
