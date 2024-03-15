@@ -483,7 +483,7 @@ const DIVISION = 7
 onMounted(() => {
     logger.debug("Taxation Component Mounted")
     
-    socket.value = io("ws://localhost:8000/", {transports: ['websocket', 'polling']});
+    socket.value = io(`ws://localhost:9001/`, {transports: ['websocket', 'polling']});
     let query = `
 
     SELECT avg_agi, avg_tax, state_name, county_name, measure, avg_data_value, REGION, DIVISION 
@@ -822,7 +822,7 @@ function clearStates() {
                         <div v-for="state in Array.from(CHOOSEN_STATES.entries()).filter(([k, v]) => v[0] === true).sort((a, b) => a[0].localeCompare(b[0]))">
                         <input 
                             checked 
-                            class="form-check-input" 
+                            class="form-check-input mx-2" 
                             type="checkbox"
                             :name="state[0]"
                             :key="state[0]"
@@ -837,7 +837,7 @@ function clearStates() {
                     <div style="overflow: scroll; height: 30vh;">
                         <div v-for="state in Array.from(CHOOSEN_STATES.entries()).filter(([k, v]) => v[0] === false).sort((a, b) => a[0].localeCompare(b[0]))">
                             <input 
-                                class="form-check-input" 
+                                class="form-check-input mx-2" 
                                 type="checkbox" 
                                 :name="state[0]"
                                 :key="state[0]"
@@ -858,7 +858,7 @@ function clearStates() {
                     <div v-for="region in Array.from(CHOOSEN_REGIONS.entries()).filter(([k, v]) => v[0] === true).sort((a, b) => a[0].localeCompare(b[0]))">
                         <input 
                             checked 
-                            class="form-check-input" 
+                            class="form-check-input mx-2" 
                             type="checkbox"
                             :name="region[0]"
                             :key="region[0]"
@@ -872,7 +872,7 @@ function clearStates() {
 
                     <div v-for="region in Array.from(CHOOSEN_REGIONS.entries()).filter(([k, v]) => v[0] === false).sort((a, b) => a[0].localeCompare(b[0]))">
                         <input 
-                            class="form-check-input" 
+                            class="form-check-input mx-2" 
                             type="checkbox" 
                             :name="region[0]"
                             :key="region[0]"
@@ -891,7 +891,7 @@ function clearStates() {
                     <div v-for="division in Array.from(CHOOSEN_DIVISIONS.entries()).filter(([k, v]) => v[0] === true).sort((a, b) => a[0].localeCompare(b[0]))">
                         <input 
                             checked 
-                            class="form-check-input" 
+                            class="form-check-input mx-2" 
                             type="checkbox"
                             :name="division[0]"
                             :key="division[0]"
@@ -904,7 +904,7 @@ function clearStates() {
 
                     <div v-for="division in Array.from(CHOOSEN_DIVISIONS.entries()).filter(([k, v]) => v[0] === false).sort((a, b) => a[0].localeCompare(b[0]))">
                         <input 
-                            class="form-check-input" 
+                            class="form-check-input mx-2" 
                             type="checkbox" 
                             :name="division[0]"
                             :key="division[0]"
