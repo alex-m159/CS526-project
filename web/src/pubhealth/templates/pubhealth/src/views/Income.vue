@@ -6,15 +6,25 @@
     import type { Ref } from "vue";
     import { io, Socket } from "socket.io-client";
     import { logger } from '../utils/logging';
-
+let socket: Ref<Socket<ServerToClient, ClientToServer> | null> = ref(null)
     onMounted(() => {
         logger.debug('Income Component Mounted')
-    })
+        //socket.value = io("ws://localhost:8000/", {transports: ['websocket', 'polling']});
+        let query = ``; 
+    }
 
+
+    onUnmounted(() => {
+        if (socket.value) {
+            socket.value.disconnect(); 
+            socket.value = null;
+        }
+    });
 </script>
 
 <template>
     INCOME VIEW
+    <div id="map-chart">Average Individual Income</div>
 </template>
 
 <script scoped>

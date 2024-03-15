@@ -139,6 +139,35 @@ CREATE TABLE state_regions (
     REGION String
 ) ENGINE = MergeTree();
 
+CREATE TABLE state_fips (
+    STATE_FIPS UInt32 PRIMARY KEY,
+    STATE_NAME String
+) ENGINE = MergeTree();
+
+CREATE TABLE county_fips (
+    STATE_COUNTY_FIPS UInt64 PRIMARY KEY,
+    COUNTY_FIPS UInt32,
+    COUNTY_NAME String,
+    STATE_FIPS  UInt32,
+    STATE_NAME  String,
+    GEO         String
+) ENGINE = MergeTree();
+
+CREATE TABLE county_gini (
+    STATE_COUNTY_FIPS UInt64 PRIMARY KEY,
+    GINI DOUBLE
+) ENGINE = MergeTree();
+
+CREATE TABLE neighboring_counties (
+    ROWNUM Int64 PRIMARY KEY,
+    STATE_COUNTY_FIPS_left UInt64,
+    GINI_left DOUBLE,
+    AVG_AGI_left Decimal(10, 3),
+    STATE_COUNTY_FIPS_right UInt64,
+    GINI_right DOUBLE,
+    AVG_AGI_right Decimal(10, 3)
+) ENGINE = MergeTree();
+
 
 
 -- Clickhouse doesn't support SQL script files with multiple statements
