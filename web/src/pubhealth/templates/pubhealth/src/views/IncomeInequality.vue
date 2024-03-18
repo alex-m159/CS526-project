@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import transformScale from '@turf/transform-scale'
-import interset from '@turf/intersect'
+// import transformScale from '@turf/transform-scale'
+// import interset from '@turf/intersect'
 import { ref, onMounted, onUnmounted } from "vue";
 import type { Ref } from "vue";
 import { logger } from '../utils/logging';
 import { io, Socket } from "socket.io-client";
-
 //@ts-ignore
 import * as d3 from "d3";
 
 import * as topojson from "topojson"
 // import * as turf from "@turf/turf"
+
+import { legend } from "@/utils/bivariate";
 
 
 
@@ -56,7 +57,7 @@ let state_mesh = ref(null)
 let svg = ref(null)
 let map_shapes = ref(null)
 let gg = ref(null)
-
+// let spikes = ref(null)
 let width = document.documentElement.clientWidth*0.7
 let height = document.documentElement.clientHeight*0.8
 let viewBoxMinX = 0
@@ -120,6 +121,9 @@ function zoomed(event: any) {
     const {transform} = event;
     gg.value.attr("transform", transform);
     gg.value.attr("stroke-width", Math.min(1 / transform.k, 1));
+
+    // spikes.value.attr("stroke-width", Math.min(1 / transform.k, 1));
+    // spikes.value.attr("transform", transform);
 }
 let zoom = d3.zoom()
     .scaleExtent([0.1, 100])
@@ -314,658 +318,541 @@ function getTitle(d) {
     
 }
 
-// function showPlot() {
 
-//     window.d3 = d3
-//     scaleG.value = null
 
-//     svg.value = d3.create('svg')
-//         .attr("viewBox", [viewBoxMinX, viewBoxMinY, width-200, height-150])
-//         .attr("width", width)
-//         .attr("height", height)
-//         .attr("style", "max-width: 100%; height: auto; border: grey solid 1px")
-//         .attr('border', 'black solid 1px')
-//         .on("click", reset);
+function trivariateLegend() {
+    trivariatePlot()
+    let ticks = 5
+    let scale = 15
+    let strokesize = 0.2
+    let translate_x = 10
+    let translate_y = translate_x * (Math.sqrt(3)/2)
+    let base = 10
+    let height = base * (Math.sqrt(3)/2)
+    let points = [[0, 0], [base, 0], [base/2, height]]
+    let equilateral = `${0},${0} ${base},${0} ${base/2},${height}`
+    
 
-//     gg.value = svg.value.append('g')
-//     map_shapes.value = gg.value
-//         .append('g')
-//         .attr('fill', '#ccc')
-//         .attr('cursor', 'pointer')
-//         .selectAll('path')
-//         .data(pickData())
-//         .join('path')
-//             .attr('fill', (d) => getColor(d))
-//             .on('click', clicked)
-//             .attr('d', (g) => {
-//                 return path(g)
-//         })
 
-//     map_shapes.value.append("title")
-//         .text(d => getTitle(d));
 
-//     gg.value.append("path")
-//       .attr("fill", "none")
-//       .attr("stroke", "#aaa")
-//       .attr("stroke-linejoin", "round")
-//       .attr("d", path(pickMesh()));
+    let g = d3.create('svg:g')
+    let triangles = ticks - 1
+    for(var i = 1; i <= triangles; i++) {
+        let polygon = g.append('polygon')
+        
+        polygon
+            .attr('points', equilateral)
+            .style('fill', 'cyan')
+            .style('stroke', 'black')
+            .style('stroke-width', strokesize)
+            .attr('transform', `translate(${translate_x*i}, 0) rotate(180)`)
+    }
+    triangles -= 1
+    for(var i = 1; i <= triangles; i++) {
+        g
+        .append('polygon')
+            .attr('points', equilateral)
+            .style('fill', 'cyan')
+            .style('stroke', 'black')
+            .style('stroke-width', strokesize)
+            .attr('transform', `translate(${translate_x*i - translate_x/2}, ${-(translate_y)}) rotate(0)`)
+    }
+    for(var i = 1; i <= triangles; i++) {
+        g
+        .append('polygon')
+            .attr('points', equilateral)
+            .style('fill', 'cyan')
+            .style('stroke', 'black')
+            .style('stroke-width', strokesize)
+            .attr('transform', `translate(${translate_x*i + translate_x/2}, ${-(translate_y)}) rotate(180)`)
+    }
+    triangles -= 1
+    for(var i = 1; i <= triangles; i++) {
+        g
+        .append('polygon')
+            .attr('points', equilateral)
+            .style('fill', 'cyan')
+            .style('stroke', 'black')
+            .style('stroke-width', strokesize)
+            .attr('transform', `translate(${translate_x*i}, ${-(translate_y*2)}) rotate(0)`)
+    }
+    for(var i = 1; i <= triangles; i++) {
+        g
+        .append('polygon')
+            .attr('points', equilateral)
+            .style('fill', 'cyan')
+            .style('stroke', 'black')
+            .style('stroke-width', strokesize)
+            .attr('transform', `translate(${translate_x*i + translate_x}, ${-(translate_y*2)}) rotate(180)`)
+    }
+    
+    triangles -= 1
+    g
+    .append('polygon')
+        .attr('points', equilateral)
+        .style('fill', 'cyan')
+        .style('stroke', 'black')
+        .style('stroke-width', strokesize)
+        .attr('transform', `translate(${1.5*translate_x}, ${-(translate_y*3)}) rotate(0)`)
+    g
+    .append('polygon')
+        .attr('points', equilateral)
+        .style('fill', 'cyan')
+        .style('stroke', 'black')
+        .style('stroke-width', strokesize)
+        .attr('transform', `translate(${2.5*translate_x}, ${-(translate_y*3)}) rotate(180)`)
+    
+    return g
+}
 
-//       gg.value.append("path")
-//       .attr("fill", "none")
-//       .attr("stroke", "#444")
-//       .attr("stroke-linejoin", "round")
-//       .attr("stroke-width", 1)
-//       .attr("d", path(pickMesh("states")));
+
+function showPlot() {
+
+    window.d3 = d3
+    scaleG.value = null
+
+    svg.value = d3.create('svg')
+        .attr("viewBox", [viewBoxMinX, viewBoxMinY, width-200, height-150])
+        .attr("width", width)
+        .attr("height", height)
+        .attr("style", "max-width: 100%; height: auto; border: grey solid 1px")
+        .attr('border', 'black solid 1px')
+        .on("click", reset);
+
+    gg.value = svg.value.append('g')
+    map_shapes.value = gg.value
+        .append('g')
+        .attr('fill', '#ccc')
+        .attr('cursor', 'pointer')
+        .selectAll('path')
+        .data(pickData())
+        .join('path')
+            .attr('fill', (d) => getColor(d))
+            .on('click', clicked)
+            .attr('d', (g) => {
+                return path(g)
+        })
+
+    map_shapes.value.append("title")
+        .text(d => getTitle(d));
+
+    gg.value.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#aaa")
+      .attr("stroke-linejoin", "round")
+      .attr("d", path(pickMesh()));
+
+      gg.value.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#444")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-width", 1)
+      .attr("d", path(pickMesh("states")));
       
 
-//     svg.value.call(zoom)
-//     if(document.getElementById('plot')?.childNodes.length == 0) {
-//         document.getElementById('plot')?.appendChild(svg.value.node())
-//     }
+    svg.value.call(zoom)
+    if(document.getElementById('plot')?.childNodes.length == 0) {
+        document.getElementById('plot')?.appendChild(svg.value.node())
+        // showScatter()
+        // showSpike()
+        window.gg = gg
+        gg.value.append(() => trivariateLegend().node())
+        // document.getElementById('scatter')?.append(chart(pickData()))
+    }
 
 
     
-// }
+}
 
 
-// function updatePlot() {
-//     gg.value.remove()
-//     map_shapes.value.remove()
+function updatePlot() {
+    gg.value.remove()
+    map_shapes.value.remove()
 
-//     gg.value = svg.value.append('g')
+    gg.value = svg.value.append('g')
 
-//     scaleG.value = null
+    scaleG.value = null
 
-//     map_shapes.value = gg.value
-//         .append('g')
-//         .attr('fill', "#ccc")
-//         .attr('cursor', 'pointer')
-//         .selectAll('path')
-//         .data(pickData())
-//         .join('path')
-//             .attr('fill', (d) => getColor(d))
-//             .on('click', clicked)
-//             .attr('d', (g) => {
-//                 return path(g)
-//         })
+    map_shapes.value = gg.value
+        .append('g')
+        .attr('fill', "#ccc")
+        .attr('cursor', 'pointer')
+        .selectAll('path')
+        .data(pickData())
+        .join('path')
+            .attr('fill', (d) => getColor(d))
+            .on('click', clicked)
+            .attr('d', (g) => {
+                return path(g)
+        })
    
-//     map_shapes.value.append("title")
-//         .text(d => getTitle(d));
+    map_shapes.value.append("title")
+        .text(d => getTitle(d));
    
     
     
 
-//     gg.value.append("path")
-//       .attr("fill", "none")
-//       .attr("stroke", "#aaa")
-//       .attr("stroke-linejoin", "round")
-//       .attr("d", path(pickMesh()));
+    gg.value.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#aaa")
+      .attr("stroke-linejoin", "round")
+      .attr("d", path(pickMesh()));
     
-//     gg.value.append("path")
-//       .attr("fill", "none")
-//       .attr("stroke", "#444")
-//       .attr("stroke-linejoin", "round")
-//       .attr("d", path(pickMesh("states")));
-// }
+    gg.value.append("path")
+      .attr("fill", "none")
+      .attr("stroke", "#444")
+      .attr("stroke-linejoin", "round")
+      .attr("d", path(pickMesh("states")));
+    // showScatter()
+    // showSpike()
+}
 
-// let loaded_comparisons = ref(false)
-// function countyComparisons() {
-//     let STATE_COUNTY_FIPS_left = 0
-//     let GINI_left = 1
-//     let AVG_AGI_left = 2
-//     let STATE_COUNTY_FIPS_right = 3
-//     let GINI_right = 4
-//     let AVG_AGI_right = 5
+let loaded_comparisons = ref(false)
+function countyComparisons() {
+    let STATE_COUNTY_FIPS_left = 0
+    let GINI_left = 1
+    let AVG_AGI_left = 2
+    let STATE_COUNTY_FIPS_right = 3
+    let GINI_right = 4
+    let AVG_AGI_right = 5
     
-//     socket.value.on('neighbors_result', (data) => {
-//         let {pnp, rnr, pnr, rnp} = data
-//         let pnp_map: Map<number, [boolean, any[]]> = new Map(pnp.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
-//         pnp.forEach((c) => {
-//             let k = c[STATE_COUNTY_FIPS_left]
-//             let v: [boolean, any[]] = [true, c]
-//             pnp_map.set(k, v)
-//         })
+    socket.value.on('neighbors_result', (data) => {
+        let {pnp, rnr, pnr, rnp} = data
+        let pnp_map: Map<number, [boolean, any[]]> = new Map(pnp.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
+        pnp.forEach((c) => {
+            let k = c[STATE_COUNTY_FIPS_left]
+            let v: [boolean, any[]] = [true, c]
+            pnp_map.set(k, v)
+        })
         
-//         let rnr_map: Map<number, [boolean, any[]]> = new Map(rnr.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
-//         rnr.forEach((c) => {
-//             let k = c[STATE_COUNTY_FIPS_left]
-//             let v: [boolean, any[]] = [true, c]
-//             rnr_map.set(k, v)
-//         })
+        let rnr_map: Map<number, [boolean, any[]]> = new Map(rnr.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
+        rnr.forEach((c) => {
+            let k = c[STATE_COUNTY_FIPS_left]
+            let v: [boolean, any[]] = [true, c]
+            rnr_map.set(k, v)
+        })
 
-//         let pnr_map: Map<number, [boolean, any[]]> = new Map(pnr.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
-//         pnr.forEach((c) => {
-//             let k = c[STATE_COUNTY_FIPS_left]
-//             let v: [boolean, any[]] = [true, c]
-//             pnr_map.set(k, v)
-//         })
-//         let rnp_map: Map<number, [boolean, any[]]> = new Map(rnp.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
-//         rnp.forEach((c) => {
-//             let k = c[STATE_COUNTY_FIPS_left]
-//             let v: [boolean, any[]] = [true, c]
-//             rnp_map.set(k, v)
-//         })
-//         window.pnp = pnp_map
+        let pnr_map: Map<number, [boolean, any[]]> = new Map(pnr.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
+        pnr.forEach((c) => {
+            let k = c[STATE_COUNTY_FIPS_left]
+            let v: [boolean, any[]] = [true, c]
+            pnr_map.set(k, v)
+        })
+        let rnp_map: Map<number, [boolean, any[]]> = new Map(rnp.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
+        rnp.forEach((c) => {
+            let k = c[STATE_COUNTY_FIPS_left]
+            let v: [boolean, any[]] = [true, c]
+            rnp_map.set(k, v)
+        })
+        window.pnp = pnp_map
 
-//         let with_group = county_fill.value.map((c) => {
-//             let sc_fips = Number(c.id)
-//             if(39075 == sc_fips) {
-//                 console.log('asdasd')
-//             }
-//             if(c.properties.focus === undefined) {
-//                 c.properties.focus = new Map<string, boolean>()
-//             }
+        let with_group = county_fill.value.map((c) => {
+            let sc_fips = Number(c.id)
+            if(39075 == sc_fips) {
+                console.log('asdasd')
+            }
+            if(c.properties.focus === undefined) {
+                c.properties.focus = new Map<string, boolean>()
+            }
 
-//             if(pnp_map.has(sc_fips)) {
-//                 let datum = pnp_map.get(sc_fips) as [boolean, any[]]
-//                 let is_focus = datum[0]
-//                 // c.properties.avg_agi = is_focus === true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
+            if(pnp_map.has(sc_fips)) {
+                let datum = pnp_map.get(sc_fips) as [boolean, any[]]
+                let is_focus = datum[0]
+                // c.properties.avg_agi = is_focus === true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
                 
-//                 c.properties.group.add('pnp')
-//                 c.properties.focus.set('pnp', is_focus)
-//                 c.properties.income_class = 'poor'
-//             }
-//             if(rnr_map.has(sc_fips)) {
-//                 let datum = rnr_map.get(sc_fips) as [boolean, any[]]
-//                 let is_focus = datum[0]
-//                 // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
-//                 c.properties.group.add('rnr')
-//                 c.properties.focus.set('rnr', is_focus)
-//                 c.properties.income_class = 'rich'
-//             }
-//             if(pnr_map.has(sc_fips)) {
-//                 let datum = pnr_map.get(sc_fips) as [boolean, any[]]
-//                 let is_focus = datum[0]
-//                 // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
-//                 c.properties.group.add('pnr')
-//                 c.properties.focus.set('pnr', is_focus)
-//                 if(is_focus)
-//                     c.properties.income_class = 'poor'
-//                 else
-//                     c.properties.income_class = 'rich'
-//             }
-//             if(rnp_map.has(sc_fips)) {
-//                 let datum = rnp_map.get(sc_fips) as [boolean, any[]]
-//                 let is_focus = datum[0]
-//                 // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
-//                 c.properties.group.add('rnp')
-//                 c.properties.focus.set('rnp', is_focus)
-//                 if(is_focus)
-//                     c.properties.income_class = 'rich'
-//                 else
-//                     c.properties.income_class = 'poor'
-//             }
-//             return c
-//         })
+                c.properties.group.add('pnp')
+                c.properties.focus.set('pnp', is_focus)
+                c.properties.income_class = 'poor'
+            }
+            if(rnr_map.has(sc_fips)) {
+                let datum = rnr_map.get(sc_fips) as [boolean, any[]]
+                let is_focus = datum[0]
+                // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
+                c.properties.group.add('rnr')
+                c.properties.focus.set('rnr', is_focus)
+                c.properties.income_class = 'rich'
+            }
+            if(pnr_map.has(sc_fips)) {
+                let datum = pnr_map.get(sc_fips) as [boolean, any[]]
+                let is_focus = datum[0]
+                // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
+                c.properties.group.add('pnr')
+                c.properties.focus.set('pnr', is_focus)
+                if(is_focus)
+                    c.properties.income_class = 'poor'
+                else
+                    c.properties.income_class = 'rich'
+            }
+            if(rnp_map.has(sc_fips)) {
+                let datum = rnp_map.get(sc_fips) as [boolean, any[]]
+                let is_focus = datum[0]
+                // c.properties.avg_agi = is_focus == true ? datum[1][AVG_AGI_left] : datum[1][AVG_AGI_right]
+                c.properties.group.add('rnp')
+                c.properties.focus.set('rnp', is_focus)
+                if(is_focus)
+                    c.properties.income_class = 'rich'
+                else
+                    c.properties.income_class = 'poor'
+            }
+            return c
+        })
 
-//         county_fill.value = with_group
-//         loaded_comparisons.value = true
-//         updatePlot()        
-
-//     })
-//     socket.value.emit('neighbors', 0.1, 0.9)
-// }
-// interface DataElem {
-//     avg_agi: number,
-//     avg_tax: number,
-//     region: string,
-//     division: string, 
-//     state_name: string,
-//     county_name: string,
-//     measures: Map<string, number>
-// }
-
-// interface State {
-//     state_name: string
-//     state_abbrev: string
-//     fips: number
-//     region: string
-//     division: string
-// }
-
-// let model: Ref<Map<string, Map<string, DataElem>>> = ref(new Map())
-// let hidden_data: Ref<Map<string, Map<string, DataElem>>> = ref(new Map())
-// let all_measures: Ref<Set<string>> = ref(new Set())
-// let max_measure: Ref<Map<string, number>> = ref(new Map())
-// let plot_displayed: Ref<boolean> = ref(false)
-
-// let ALL_STATES: Ref<Array<State>> = ref([])
-// let ALL_REGIONS: Ref<Map<string, State[]>> = ref(new Map())
-// let ALL_DIVISIONS: Ref<Map<string, State[]>> = ref(new Map())
-// let CHOOSEN_STATES: Ref< Map<string, [boolean, string]> > = ref(new Map())
-// let CHOOSEN_REGIONS: Ref< Map<string, [boolean, string]> > = ref(new Map())
-// let CHOOSEN_DIVISIONS: Ref< Map<string, [boolean, string]> > = ref(new Map())
-
-
-// function getFlatData() {
-//     return Array.from(model.value.values()).flatMap((map) => Array.from(map.values()))
-// }
-// function getProportionateData(d: DataElem, measure: string) {
-//     return ((d.measures.get(measure) as number) / (max_measure.value.get(measure) as number))
-// }
-
-// const root: Ref<any> = ref(null)
-// const tupstr = (tup: [number, number]) => {return `${tup[0]}-${tup[1]}`}
-// const datakey = (d: DataElem) => {return `${d.state_name}-${d.county_name}`}
-// const enumerate = d3.scaleOrdinal()
-//     .domain(d3.cross(d3.range(3), d3.range(2)).map(tupstr))
-//     .range([0, 1, 2, 3, 4, 5])
-
-
-// const reverseEnumeration = d3.scaleOrdinal(enumerate.range(), enumerate.domain())
-
-// function brush(cell: any, circle: any, svg: any, {padding, size, x, y, columns}: any) {
-//     const brush = d3.brush()
-//         .extent([[padding / 2, padding / 2], [size - padding / 2, size - padding / 2]])
-//         .on("start", brushstarted)
-//         .on("brush", brushed)
-//         .on("end", brushended);
-
-//     cell.call(brush);
-
-//     let brushCell: any;
-
-//     // Clear the previously-active brush, if any.
-//     function brushstarted() {
-//         //@ts-ignore
-//         if (brushCell !== this) {
-//         d3.select(brushCell).call(brush.move, null);
-//         //@ts-ignore
-//         brushCell = this;
-//         }
-//     }
-
-//     // Highlight the selected circles.
-//     function brushed({selection}: any, [i, j]: any) {
-//         let selected: any[] = [];
-//         if (selection) {
-//         const [[x0, y0], [x1, y1]] = selection; 
-//         circle.classed("hidden",
-//             (d: DataElem) => x0 > x[i](d.avg_agi)
-//             || x1 < x[i](d.avg_agi)
-//             || y0 > y[j]( getProportionateData(d, columns[enumerate(tupstr([i, j]))]))
-//             || y1 < y[j]( getProportionateData(d, columns[enumerate(tupstr([i, j]))])  ));
-//         selected = getFlatData().filter(
-//             (d: DataElem) => x0 < x[i](d.avg_agi)
-//             && x1 > x[i](d.avg_agi)
-//             && y0 < y[j](getProportionateData(d, columns[enumerate(tupstr([i, j]))]))
-//             && y1 > y[j](getProportionateData(d, columns[enumerate(tupstr([i, j]))])));
-//         }
-//         svg.property("value", selected).dispatch("input");
-//     }
-
-//     // If the brush is empty, select all circles.
-//     function brushended({selection}: any) {
-//         if (selection) return;
-//         svg.property("value", []).dispatch("input");
-//         circle.classed("hidden", false);
-//     }
-// }
-// const labels = ref(new Set<string>())
-
-// let colorscale: Ref<any | undefined> = ref(undefined)
-
-// function labelEnter(enter) {
-//     enter.append('foreignObject')
-//     // enter.each( (nodes) => {
-//         // console.log('entering node')
-//         // console.log(nodes)
-//     // } )
-//     // console.log('entering')
-//     // console.log(enter)
-//     // return enter
-    
-// }
-
-// function labelUpdate(update) {
-//     // console.log(`updated: ${JSON.stringify(update)}`)
-//     update.append('foreignObject')
-//     // update.remove()
-//     return update
-// }
-
-// function labelExit(exit) {
-//     // console.log(`exited: ${JSON.stringify(exit)}`)
-//     exit.remove()
-//     // return exit
-// }
-// function showPlot() {
-//     if(plot_displayed.value) {
-//         return;
-//     }
-//     const ordered_measures = 
-//         Array.from(
-//             all_measures
-//             .value
-//             .values()).sort((a, b) => a.localeCompare(b))
-//     const columns = ordered_measures
-//     const width = 600
-//     const height = width
-//     const padding = 20
-//     const size = 300//(width - (columns.length + 1) * padding) / columns.length + padding;
-
-//     const measures = Array.from(all_measures.value.values())
-//     const x = measures.map(m => {
-//         return d3.scaleLinear()
-//         .domain(d3.extent(Array.from(model.value.values()).flatMap((map) => Array.from(map.values())), (d: DataElem) => d.avg_agi))
-//         .rangeRound([padding / 2, size - padding / 2])
-//     })
-
-//     const y = measures.map(m => {
-//         return d3.scaleLinear()
-//         .domain([0.0, 1.0])
-//         .range([size - padding / 2, padding / 2])
-//     })
-
-    
-    
-//     String.prototype.hashCode = function() {
-//         var hash = 0,
-//             i, chr;
-//         if (this.length === 0) return hash;
-//         for (i = 0; i < this.length; i++) {
-//             chr = this.charCodeAt(i);
-//             hash = ((hash << 5) - hash) + chr;
-//             hash |= 0; // Convert to 32bit integer
-//         }
-//         return hash;
-//     }
-
-//     const color = d3.scaleOrdinal()
-//         .domain(Array.from(model.value.keys()))
-//         .range(["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd","#8c564b","#e377c2","#7f7f7f","#bcbd22","#17becf", "#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f", "#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f"])
-//         // .range(["#ff4040","#ff423d","#ff453a","#ff4838","#fe4b35","#fe4e33","#fe5130","#fd542e","#fd572b","#fc5a29","#fb5d27","#fa6025","#f96322","#f96620","#f7691e","#f66c1c","#f56f1a","#f47218","#f37517","#f17815","#f07c13","#ee7f11","#ed8210","#eb850e","#e9880d","#e88b0c","#e68e0a","#e49209","#e29508","#e09807","#de9b06","#dc9e05","#d9a104","#d7a403","#d5a703","#d2aa02","#d0ad02","#ceb001","#cbb301","#c9b600","#c6b800","#c3bb00","#c1be00","#bec100","#bbc300","#b8c600","#b6c900","#b3cb01","#b0ce01","#add002","#aad202","#a7d503","#a4d703","#a1d904","#9edc05","#9bde06","#98e007","#95e208","#92e409","#8ee60a","#8be80c","#88e90d","#85eb0e","#82ed10","#7fee11","#7cf013","#78f115","#75f317","#72f418","#6ff51a","#6cf61c","#69f71e","#66f920","#63f922","#60fa25","#5dfb27","#5afc29","#57fd2b","#54fd2e","#51fe30","#4efe33","#4bfe35","#48ff38","#45ff3a","#42ff3d","#40ff40","#3dff42","#3aff45","#38ff48","#35fe4b","#33fe4e","#30fe51","#2efd54","#2bfd57","#29fc5a","#27fb5d","#25fa60","#22f963","#20f966","#1ef769","#1cf66c","#1af56f","#18f472","#17f375","#15f178","#13f07c","#11ee7f","#10ed82","#0eeb85","#0de988","#0ce88b","#0ae68e","#09e492","#08e295","#07e098","#06de9b","#05dc9e","#04d9a1","#03d7a4","#03d5a7","#02d2aa","#02d0ad","#01ceb0","#01cbb3","#00c9b6","#00c6b8","#00c3bb","#00c1be","#00bec1","#00bbc3","#00b8c6","#00b6c9","#01b3cb","#01b0ce","#02add0","#02aad2","#03a7d5","#03a4d7","#04a1d9","#059edc","#069bde","#0798e0","#0895e2","#0992e4","#0a8ee6","#0c8be8","#0d88e9","#0e85eb","#1082ed","#117fee","#137cf0","#1578f1","#1775f3","#1872f4","#1a6ff5","#1c6cf6","#1e69f7","#2066f9","#2263f9","#2560fa","#275dfb","#295afc","#2b57fd","#2e54fd","#3051fe","#334efe","#354bfe","#3848ff","#3a45ff","#3d42ff","#4040ff","#423dff","#453aff","#4838ff","#4b35fe","#4e33fe","#5130fe","#542efd","#572bfd","#5a29fc","#5d27fb","#6025fa","#6322f9","#6620f9","#691ef7","#6c1cf6","#6f1af5","#7218f4","#7517f3","#7815f1","#7c13f0","#7f11ee","#8210ed","#850eeb","#880de9","#8b0ce8","#8e0ae6","#9209e4","#9508e2","#9807e0","#9b06de","#9e05dc","#a104d9","#a403d7","#a703d5","#aa02d2","#ad02d0","#b001ce","#b301cb","#b600c9","#b800c6","#bb00c3","#be00c1","#c100be","#c300bb","#c600b8","#c900b6","#cb01b3","#ce01b0","#d002ad","#d202aa","#d503a7","#d703a4","#d904a1","#dc059e","#de069b","#e00798","#e20895","#e40992","#e60a8e","#e80c8b","#e90d88","#eb0e85","#ed1082","#ee117f","#f0137c","#f11578","#f31775","#f41872","#f51a6f","#f61c6c","#f71e69","#f92066","#f92263","#fa2560","#fb275d","#fc295a","#fd2b57","#fd2e54","#fe3051","#fe334e","#fe354b","#ff3848","#ff3a45","#ff3d42","#ff4040"])
-//     colorscale.value = color
-
-//     const xAxis = d3.axisBottom()
-//         .ticks(4)
-//         .tickSize(size * 2)
-    
-//     const axisX = (g: any) => {
-//         g.selectAll("g").data(x).join("g")
-//         .attr("transform", (d: any, i: any) => `translate(${i * size},0)`)
-//         .attr('data_type', 'xaxisinner')
-//         .each(function(d: any) { 
-//             return d3.select(this).call(xAxis.scale(d));
-//         })
-//         .call(g => g.select(".domain").remove())
-//         .call(g => g.selectAll(".tick line").attr("stroke", "#ddd"));
-//     }
-
-//     const yAxis = d3.axisLeft()
-//       .ticks(5)
-//       .tickSize(-size * 2);
-
-//     const axisY = g => g.selectAll("g").data(y).join("g")
-//       .attr("transform", (d, i) => `translate(0,${i * size})`)
-//       .attr('data_type', 'yaxisinner')
-//       .each(function(d) { return d3.select(this).call(yAxis.scale(d)); })
-//       .call(g => g.select(".domain").remove())
-//       .call(g => g.selectAll(".tick line").attr("stroke", "#ddd"));
-    
-//     const svg = d3.create('svg')
-//         .attr('viewBox', [-50,-50,1000,1000])
-//         .style('height', 1200)
-//         .style('width', 1200)
-
-    
-//     svg.append("style")
-//       .text(`circle.hidden { fill: #000; fill-opacity: 1; r: 1px; }`);
-
-//     svg.append("g")
-//         .attr('data-id', 'xaxis')
-//         .call(axisX);
-
-//     svg.append("g")
-//         .attr('data-id', 'yaxis')
-//         .call(axisY);
-
+        county_fill.value = with_group
+        loaded_comparisons.value = true
+        updatePlot()        
         
-    
-//     const cell = svg.append("g")
-//         .selectAll("g")
-//         .data(d3.cross(d3.range(3), d3.range(2)))
-//         .join("g")
-//         .attr("transform", ([i, j]) => `translate(${i * size},${j * size})`)
-//         .attr('data-id', ([i, j]) => `cell`)
-//         // .attr('data-x', ([i, j]) => `${i * size}`)
-//         // .attr('data-y', ([i, j]) => `${j * size}`)
-//         // .attr('data-id', ([i, j]) => `${m([i, j])}`);
+    })
+    socket.value.emit('neighbors', 0.1, 0.9)
+}
 
-
-//     cell.append("rect")
-//       .attr("fill", "none")
-//       .attr("stroke", "#aaa")
-//       .attr("x", padding / 2 + 0.5)
-//       .attr("y", padding / 2 + 0.5)
-//       .attr("width", size - padding)
-//       .attr("height", size - padding);
-
-    
-
-//     cell.each(function([i, j]) {
-//         d3.select(this).selectAll("circle")
-//         .data(getFlatData(), datakey)
-//         .join("circle")
-//         .attr("cx", (d: DataElem) => x[i](d.avg_agi))
-//         .attr("cy", (d: DataElem) => {
-//             return y[j](getProportionateData(d, columns[enumerate(tupstr([i, j]))]))
-//         })
-//         .attr('data-id', (d: DataElem) => {
-//             return `${d.county_name}-${d.state_name}`
-//         })
-//         // .on('mouseenter', (event: Event) => {
-//         //     let targetX = d3.select(event.target)
-//         //     .attr('cx')
-
-//         //     let targetY = d3.select(event.target)
-//         //     .attr('cy')
-            
-//         //     svg
-//         //     .append('text')
-//         //         .attr('x', targetX)
-//         //         .attr('y', targetY)
-//         //         .attr('dx', 0)
-//         //         .attr('dy', 0)
-//         //         .attr('class', 'small')
-//         //         .attr('textLength', 50)
-//         //         .text('Testing text')
-//         // });
-//     })
-//     const circle = cell.selectAll("circle")
-//       .attr("r", 3.5)
-//       .attr("fill-opacity", 0.7)
-//       .attr("fill", (d: DataElem) => {
-//             if(group_by.value == 'division')
-//                 return color(d.division)
-//             else if(group_by.value == 'region')
-//                 return color(d.region)
-//             else
-//                 return color(d.state_name)
-//         });
-
-    
-
-
-//     // Ignore this line if you don't need the brushing behavior.
-//     cell.call(brush, circle, svg, {padding, size, x, y, columns});
-
-    
-//     const reverseEnumeration = d3.scaleOrdinal(enumerate.range(), enumerate.domain())
-
-//     svg.append("g")
-//       .attr('data-type', 'labels')
-//       .style("font", "bold 10px sans-serif")
-//       .style("pointer-events", "none")
-//       .selectAll('text')
-//     .data(columns, (c) => c)
-//     .join('foreignObject')
-//         .attr("transform", (d, i) => {
-//             let [x, y] = reverseEnumeration(i).split('-')
-//             return `translate(${x * size},${(y * size)})`
-//         })
-        
-//         .attr("x", padding)
-//         .attr("y", padding)
-//         .attr("dy", ".71em")
-//         .attr('width', '200')
-//         .attr('height', '100')
-//         .attr('id', (d: string) => d)
-//         .text((d: string) => `${d}`);
-
-//     svg.property("value", [])
-//     document.getElementById('plot')?.append(svg.node())
-//     plot_displayed.value = true
-//     root.value = svg
-// }
-
-// function updatePlot() {
-//     const ordered_measures = 
-//         Array.from(
-//             all_measures
-//             .value
-//             .values()).sort((a, b) => a.localeCompare(b))
-    
-//     const columns = ordered_measures
-//     const width = 600
-//     const height = width
-//     const padding = 20
-//     const size = 300//(width - (2 + 1) * padding) / 4 + padding;
-//     let svg = root.value
-
-    
-//     svg.select("g[data-type=labels]")
-//       .attr('data-type', 'labels')
-//       .style("font", "bold 10px sans-serif")
-//       .style("pointer-events", "none")
-//       .selectAll('text')
-//     .data(columns, (c) => c)
-//     .join('foreignObject')
-        
-//         .attr("transform", (d, i) => {
-//             let [x, y] = reverseEnumeration(i).split('-')
-//             return `translate(${x * size},${((y * size)-50)})`
-//         })
-//         .attr("x", padding)
-//         .attr("y", padding)
-//         .attr("dy", ".71em")
-//         .attr('width', '200')
-//         .attr('height', '100')
-//         .attr('id', (d: string) => {
-//             d
-//         })
-//         .text((d: string) => `${d}`);
-
-//     const x = [1, 2, 3].map(m => {
-//         let [min, max] = d3.extent(getFlatData(), (d: DataElem) => d.avg_agi)
-//         return d3.scaleLinear()
-//         .domain([10000, max*1.05])
-//         .rangeRound([padding / 2, size - padding / 2])
-//     })
-
-//     const y = [1, 2].map(m => {
-//         return d3.scaleLinear()
-//         .domain([0.0, 1.1])
-//         .range([size - padding / 2, padding / 2])
-//     })
-//     const xAxis = d3.axisBottom()
-//         .ticks(4)
-//         .tickSize(size * 2)
-    
-//     const axisX = (g: any) => {
-//         g.selectAll("g[data_type=xaxisinner]").data(x).join("g")
-//         .attr('data_type', 'xaxisinner')
-//         .attr("transform", (d: any, i: any) => `translate(${i * size},0)`)
-//         .each(function(d: any) { 
-//             return d3.select(this).call(xAxis.scale(d));
-//         })
-//         .call(g => g.select(".domain").remove())
-//         .call(g => g.selectAll(".tick line").attr("stroke", "#ddd"));
-//     }
-
-//     const yAxis = d3.axisLeft()
-//       .ticks(5)
-//       .tickSize(-size * 3);
-
-//     const axisY = g => g.selectAll("g[data_type=yaxisinner]").data(y).join("g")
-//       .attr("transform", (d, i) => `translate(0,${i * size})`)
-//       .attr('data_type', 'yaxisinner')
-//       .each(function(d) { return d3.select(this).call(yAxis.scale(d)); })
-//       .call(g => g.select(".domain").remove())
-//       .call(g => g.selectAll(".tick line").attr("stroke", "#ddd"));
-
-//     let color_keys = Array.from(model.value.keys())
-//     const color = d3.scaleOrdinal()
-//         .domain(color_keys)
-//         .range(["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd","#8c564b","#e377c2","#7f7f7f","#bcbd22","#17becf", "#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f", "#8dd3c7","#ffffb3","#bebada","#fb8072","#80b1d3","#fdb462","#b3de69","#fccde5","#d9d9d9","#bc80bd","#ccebc5","#ffed6f"])
-//     colorscale.value = color
-//     let cell = svg
-//     .selectAll('g[data-id=cell]')
-//     cell.each(function ([i, j]) {
-//         d3.select(this).selectAll("circle")
-//         .data(getFlatData().filter((d: DataElem) => d.measures.has( columns[enumerate(tupstr([i, j]))]) ), datakey)
-//         .join("circle")
-//         .attr("cx", (d: DataElem) => x[i](d.avg_agi))
-//         .attr("cy", (d: DataElem) => {
-//             return y[j](getProportionateData(d, columns[enumerate(tupstr([i, j]))]))
-//         })
-//         .attr('data-id', (d: DataElem) => {
-//             return `${d.county_name}-${d.state_name}`
-//         })
-//         .attr("r", 3.5)
-//         .attr("fill-opacity", 0.7)
-//         .attr("fill", (d: DataElem) => {
-//             if(group_by.value == 'division')
-//                 return color(d.division)
-//             else if(group_by.value == 'region')
-//                 return color(d.region)
-//             else
-//                 return color(d.state_name)
-//         });
-//     })
-//     const circle = cell.selectAll("circle")
-//     cell.call(brush, circle, svg, {padding, size, x, y, columns});
-
-
-
-
+/**
+ * 
+ * Spike Map - decided not to use this since it was very cluttered and difficult to 
+ * see with the colored map in the background, especially in the county view.
+ * 
+ * Not removing it yet just to keep it for reference.
+ * 
+ */
+// Copyright 2022 Observable, Inc.
+// Released under the ISC license.
+// https://observablehq.com/@d3/spike-map
+//  function SpikeMap(data, {
+//     position = d => d, // given d in data, returns the [longitude, latitude]
+//     value = () => undefined, // given d in data, returns the quantitative value
+//     title, // given a datum d, returns the hover text
+//     scale = (domain, range) => d3.scaleQuantize(domain, range), // type of length scale
+//     domain, // [0, max] values; input of length scale; must start at zero
+//     maxLength = 200, // maximum length of spikes
+//     width = 640, // outer width, in pixels
+//     height, // outer height, in pixels
+//     projection, // a D3 projection; null for pre-projected geometry
+//     features, // a GeoJSON feature collection for the background
+//     borders, // a GeoJSON object for stroking borders
+//     spike = (length, width = 7) => `M${-width / 2},0L0,${-length}L${width / 2},0`,
+//     outline = projection && projection.rotate ? {type: "Sphere"} : null, // a GeoJSON object for the background
+//     backgroundFill = "#e0e0e0", // fill color for background
+//     backgroundStroke = "white", // stroke color for borders
+//     backgroundStrokeWidth, // stroke width for borders
+//     backgroundStrokeOpacity, // stroke width for borders
+//     backgroundStrokeLinecap = "round", // stroke line cap for borders
+//     backgroundStrokeLinejoin = "round", // stroke line join for borders
+//     fill = "pink", // fill color for spikes
+//     fillOpacity = 0.3, // fill opacity for spikes
+//     stroke = "black", // stroke color for spikes
+//     strokeWidth, // stroke width for spikes
+//     strokeOpacity, // stroke opacity for spikes
+//     legendX = width - 20,
+//     legendY = height - 20,
+//   } = {}) {
+//     // Compute values.
+//     const I = d3.map(data, (_, i) => i);
+//     const V = d3.map(data, value)
+//     const P = d3.map(data, position);
+//     const T = title == null ? null : d3.map(data, title);
   
+//     // Compute default domains.
+//     if (domain === undefined) domain = [0, d3.max(V)];
+  
+//     // Construct scales.
+//     const length = scale(V.sort((a, b) => a-b), [1, 5, 20, 40, 60, 80, 100]);
+  
+//     // Compute the default height. If an outline object is specified, scale the projection to fit
+//     // the width, and then compute the corresponding height.
+//     if (height === undefined) {
+//       if (outline === undefined) {
+//         height = 400;
+//       } else {
+//         const [[x0, y0], [x1, y1]] = d3.geoPath(projection.fitWidth(width, outline)).bounds(outline);
+//         const dy = Math.ceil(y1 - y0), l = Math.min(Math.ceil(x1 - x0), dy);
+//         projection.scale(projection.scale() * (l - 1) / l).precision(0.2);
+//         height = dy;
+//       }
+//     }
+  
+//     // Construct a path generator.
+//     const path = d3.geoPath(projection);
+  
+//     const svg = d3.select("svg")
+ 
+  
+//     const legend = svg.append("g")
+//         .attr("fill", "#777")
+//         .attr("text-anchor", "middle")
+//         .attr("font-family", "sans-serif")
+//         .attr("font-size", 10)
+//       .selectAll("g")
+//         .data(length.ticks(4).slice(1).reverse())
+//       .join("g")
+//         .attr("transform", (d, i) => `translate(${legendX - i * 18},${legendY})`);
+  
+//     legend.append("path")
+//         .attr("fill", "red")
+//         .attr("fill-opacity", 0.3)
+//         .attr("stroke", "red")
+//         .attr("d", d => spike(length(d)));
+  
+//     legend.append("text")
+//         .attr("dy", "1.3em")
+//         .text(length.tickFormat(4, "s"));
+  
+//     let spikes = gg.value.append('g')
     
+//     spikes.attr("fill", fill)
+//         .attr("fill-opacity", fillOpacity)
+//         .attr("stroke", stroke)
+//         .attr("stroke-width", strokeWidth)
+//         .attr("stroke-opacity", strokeOpacity)
+//       .selectAll("path")
+//       .data(d3.range(data.length)
+//           .filter(i => P[i])
+//           .sort((i, j) => d3.ascending(P[i][1], P[j][1]) || d3.ascending(P[i][0], P[j][0])))
+//       .join("path")
+//         .attr("transform", projection == null
+//             ? i => `translate(${P[i]})`
+//             : i => `translate(${projection(P[i])})`)
+//         .attr("d", i => spike(length(V[i])))
+//         .call(T ? path => path.append("title").text(i => T[i]) : () => {});
+//     return spikes;
+//   }
+// function centroid(feature: any) { 
+//   return path.centroid(feature);
+// }
+// let chart = (income_metric, statemap, countymap) => SpikeMap(income_metric, {
+//   value: (d) => {
+//     let {income_metric, statefips, countyfips} = d
+//     return income_metric
+//   },
+//   position(d) {
+//     let {income_metric, statefips, countyfips} = d
+//     if(level.value == 'counties') {
+//         const county = countymap.get(countyfips);
+//         return centroid(county);
+//     } else {
+//         let state = statemap.get(statefips)
+//         return centroid(state)
+//     }
+    
+//   },
+//   title: (d) => {
+//     let {income_metric, statefips, countyfips} = d
+//     const state = statemap.get(statefips)
+//     const county = countymap.get(countyfips)
+//     return `${county?.properties.name}, ${state?.properties.name}\n${(Number(income_metric)).toLocaleString("en")}`;
+//   },
+//   features: county_fill.value,
+//   borders: county_mesh.value,
+//   width: 975,
+//   height: 610
+// })
 
-//     svg.select("g[data-id=xaxis]")
-//         .call(axisX);
 
-//     svg.select("g[data-id=yaxis]")
-//         .call(axisY);
+// function showSpike() {
 
-//     // svg.select("g[data-type=labels]")
-//     //   .style("font", "bold 10px sans-serif")
-//     //   .style("pointer-events", "none")
-//     // .selectAll("text")
-//     // .data(columns, (c) => c)
-//     // .join(labelEnter, labelUpdate, labelExit)
-//     //     .attr("transform", (d, i) => {
-//     //         let [x, y] = reverseEnumeration(i).split('-')
-//     //         return `translate(${x * size},${y * size})`
-//     //     })
-//     //     .attr("x", padding)
-//     //     .attr("y", padding)
-//     //     .attr("dy", ".71em")
-//     //     .attr('width', '200')
-//     //     .attr('height', '100')
-//     //     .attr('id', (d: string) => {
-//     //         d
-//     //     })
-//     //     .text((d: string) => `${d}`);
+//     let countymap = new Map(county_fill.value.map(d => [d.id, d]))
+//     let statemap = new Map(state_fill.value.map(d => [d.id, d]))
+
+//     let data = pickData().map((d: any) => ({
+//         'income_metric': getIncomeMetric(d),
+//         'statefips': d.id[0] + d.id[1],
+//         'countyfips': d.id
+//     }))
+//     chart(data, statemap, countymap)
+// }
+
+
+// function showScatter() {
+//     // Specify the chart?s dimensions.
+//   const width = 928;
+//   const height = 600;
+//   const marginTop = 20;
+//   const marginRight = 30;
+//   const marginBottom = 30;
+//   const marginLeft = 40;
+
+//   d3.select("svg[data-scatter=true]").remove()
+
+//   // Create the horizontal (x) scale, positioning N/A values on the left margin.
+//   const x = d3.scaleLinear()
+//       .domain([0, d3.max(pickData(), d => getIncomeMetric(d))]).nice()
+//       .range([marginLeft, width - marginRight])
+//       .unknown(marginLeft);
+
+//   // Create the vertical (y) scale, positioning N/A values on the bottom margin.
+//   const y = d3.scaleLinear()
+//       .domain([0, d3.max(pickData(), d => getIncomeMetric(d))]).nice()
+//       .range([height - marginBottom, marginTop])
+//       .unknown(height - marginBottom);
+
+//   // Create the SVG container.
+//   const svg = d3.create("svg")
+//       .attr("viewBox", [0, 0, width, height])
+//       .attr("data-scatter", true)
+//       .property("value", []);
+
+//   // Append the axes.
+//   svg.append("g")
+//       .attr("transform", `translate(0,${height - marginBottom})`)
+//       .call(d3.axisBottom(x))
+//       .call(g => g.select(".domain").remove())
+//       .call(g => g.append("text")
+//           .attr("x", width - marginRight)
+//           .attr("y", -4)
+//           .attr("fill", "#000")
+//           .attr("font-weight", "bold")
+//           .attr("text-anchor", "end")
+//           .text("Health vs. Income"));
+
+//   svg.append("g")
+//       .attr("transform", `translate(${marginLeft},0)`)
+//       .call(d3.axisLeft(y))
+//       .call(g => g.select(".domain").remove())
+//       .call(g => g.select(".tick:last-of-type text").clone()
+//           .attr("x", 4)
+//           .attr("text-anchor", "start")
+//           .attr("font-weight", "bold")
+//           .text("Health Outcome (normalized to maximum observation)"));
+
+//   // Append the dots.
+//   const dot = svg.append("g")
+//       .attr("fill", "none")
+//       .attr("stroke", "steelblue")
+//       .attr("stroke-width", 1.5)
+//     .selectAll("circle")
+//     .data(pickData())
+//     .join("circle")
+//       .attr("transform", d => `translate(${x(getIncomeMetric(d))},${y(getIncomeMetric(d))})`)
+//       .attr("r", 3);
+
+//   // Create the brush behavior.
+//   svg.call(d3.brush().on("start brush end", ({selection}) => {
+//     let value = [];
+//     if (selection) {
+//       const [[x0, y0], [x1, y1]] = selection;
+//       value = dot
+//         .style("stroke", "gray")
+//         .filter(d => x0 <= x(getIncomeMetric(d)) && x(getIncomeMetric(d)) < x1
+//                 && y0 <= y(getIncomeMetric(d)) && y(getIncomeMetric(d)) < y1)
+//         .style("stroke", "steelblue")
+//         .data();
+//     } else {
+//       dot.style("stroke", "steelblue");
+//     }
+
+//     // Inform downstream cells that the selection has changed.
+//     svg.property("value", value).dispatch("input");
+//   }));
+
+//   document.getElementById('scatter')?.append(svg.node())
 // }
 
 onMounted(() => {
-    
+    trivariatePlot()
     let query = `
     SELECT STATE_COUNTY_FIPS, GINI, STATE_NAME
     FROM cps_00004.county_gini
     JOIN cps_00004.county_fips
     ON county_gini.STATE_COUNTY_FIPS = county_fips.STATE_COUNTY_FIPS
+    WHERE 0 < GINI AND GINI < 100
     `
 
     let query_state = `
@@ -985,6 +872,26 @@ onMounted(() => {
     SELECT STATEFIPS, (sum(ADJUSTED_GROSS_INCOME) / sum(NUM_RETURNS)) as avg_agi, (sum(TAXES_PAID_AMOUNT) / sum(NUM_RETURNS)) as avg_tax
     FROM cps_00004.income_tax 
     GROUP BY cps_00004.income_tax.STATEFIPS
+    `
+
+    let health_county_query = `
+    SELECT COUNTY_FIPS, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
+    FROM cps_00004.places_county 
+    WHERE MEASURE LIKE '%heart%' OR MEASURE LIKE '%Cancer%' OR MEASURE LIKE '%teeth%' OR MEASURE LIKE '%dentist%' OR MEASURE LIKE '%Fair or poor self-rated health status among adults%' OR MEASURE LIKE '%Stroke among adults aged%'
+    GROUP BY COUNTY_FIPS, MEASURE
+    `
+
+    let health_state_query = `
+    SELECT STATE_FIPS, MEASURE as measure, avg(DATA_VALUE) as avg_data_value
+    FROM (
+            SELECT STATE_NAME, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
+            FROM cps_00004.places_county 
+            WHERE MEASURE LIKE '%heart%' OR MEASURE LIKE '%Cancer%' OR MEASURE LIKE '%teeth%' OR MEASURE LIKE '%dentist%' OR MEASURE LIKE '%Fair or poor self-rated health status among adults%' OR MEASURE LIKE '%Stroke among adults aged%'
+            GROUP BY COUNTY_FIPS, MEASURE
+        ) 
+        as inside
+    JOIN cps_00004.state_fips
+    ON cps_00004.state_fips.STATE_NAME = inside.STATE_NAME
     `
 
     socket.value.on('data', (data) => {
@@ -1064,7 +971,45 @@ onMounted(() => {
             if(level.value === "states") {
                 // updatePlot()
             }
-                
+        }
+
+        if(data['name'] === 'health_county') {
+            let ca = new Map<number, [string, number]>(data['data'].map((row) => { return [row[0], [row[1], row[2]]  ]}))
+            let with_health = county_fill.value.map((c) => {
+                let sc_fips = Number(c.id)
+
+                if(c.properties.health_metrics === undefined) {
+                    c.properties.health_metrics = new Map<string, number>()
+                }
+
+                if(ca.has(sc_fips)) {
+                    let [measure, datavalue] = ca.get(sc_fips) as [string, number]
+                    c.properties.health_metrics.set(measure, datavalue)
+                }
+                return c
+            })
+            county_fill.value = with_health
+            // if(level.value === "counties") {
+            //     updatePlot()
+            // }
+        }
+
+        if(data['name'] === 'health_county') {
+            let sa = new Map<number, [string, number]>(data['data'].map((row) => { return [row[0], [row[1], row[2]]  ]}))
+            let with_health = state_fill.value.map((s) => {
+                let s_fips = Number(s.id)
+
+                if(s.properties.health_metrics === undefined) {
+                    s.properties.health_metrics = new Map<string, number>()
+                }
+
+                if(sa.has(s_fips)) {
+                    let [measure, datavalue] = sa.get(s_fips) as [string, number]
+                    s.properties.health_metrics.set(measure, datavalue)
+                }
+                return s
+            })
+            state_fill.value = with_health
         }
 
     })
@@ -1097,8 +1042,8 @@ onMounted(() => {
         socket.value.emit('query', query, "county")
         socket.value.emit('query', county_agi, "county_agi")
         socket.value.emit('query', state_agi, "state_agi")
-        // socket.value.emit('query', state_fips_query, "state_fips")
-
+        socket.value.emit('query', health_county_query, 'health_county')
+        socket.value.emit('query', health_state_query, 'health_state')
     })
     
     

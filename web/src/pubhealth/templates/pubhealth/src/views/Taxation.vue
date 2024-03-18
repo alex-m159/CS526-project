@@ -485,7 +485,6 @@ onMounted(() => {
     
     socket.value = io(`ws://localhost:9001/`, {transports: ['websocket', 'polling']});
     let query = `
-
     SELECT avg_agi, avg_tax, state_name, county_name, measure, avg_data_value, REGION, DIVISION 
     FROM (
             SELECT (sum(ADJUSTED_GROSS_INCOME) / sum(NUM_RETURNS)) as avg_agi, (sum(TAXES_PAID_AMOUNT) / sum(NUM_RETURNS)) as avg_tax, any(STATE_NAME) as state_name, any(COUNTY_NAME) as county_name, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
