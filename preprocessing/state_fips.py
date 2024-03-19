@@ -63,4 +63,6 @@ import csv
 
 with open('../data/state-fips.csv', 'w') as fw:
     writer = csv.writer(fw)
-    writer.writerows(STATES)
+    for (fips, name) in STATES:
+        
+        writer.writerow([fips, name.title()])

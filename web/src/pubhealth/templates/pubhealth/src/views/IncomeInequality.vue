@@ -11,7 +11,7 @@ import * as d3 from "d3";
 import * as topojson from "topojson"
 // import * as turf from "@turf/turf"
 
-import { legend } from "@/utils/bivariate";
+import { bivaraite_side_length, bivariate_colors, legend } from "@/utils/bivariate";
 
 
 
@@ -71,7 +71,8 @@ let proj = d3.geoMercator()
 let path = d3.geoPath()
 
 // Use to switch between AGI and Gini
-let agi_scale = ref(false)
+let income_metric = ref('gini')
+let income_metric_options = ref(['none', 'gini', 'agi'])
 
 // Use to switch between State relative metrics and national 
 // metrics for AGI and Gini
@@ -86,7 +87,44 @@ let legendAGI = ref(null)
 let scaleClusters = ref(null)
 let legendClusters = ref(null)
 let scaleLevel = ref("states")
-let cluster_metric_agi = ref(false)
+// This is used to tell us if the cluster scales (i.e. pnpScale, rnrScale, etc.) have been udpated to use
+// the same income metric (Gini or AGI) as the unclustered scale. 
+// It should match the agi_scale variable and if it doesn't then the
+// scaleClusters will be updated the next time getColor is called.
+let cluster_income_metric = ref('gini')
+//
+// A flag to temporarily show color for all the counties
+// even when in the clustered view. 
+let color_all_with_clusters = ref(false)
+
+// This tells us the currently visualized health metric.
+let health_metric = ref("none")
+let health_metric_options = ref(new Set(['none']))
+window.health_metric = health_metric
+// The color scale for health metrics.
+// Needs to be updated each time health_metric is changed
+// since this is normalized discretization of health metric
+// data values 
+let healthScale = ref(null)
+let healthLegend = ref(null)
+
+// Used to ensure that the choosen health_metric and
+// the healthScale are in sync. This follows the health metric
+// used to construct the healthScale and if it's different
+// than the health_metric then the healthScale should be updated.
+let scaleHealthMetric = ref('none')
+
+
+let bivariate_scale: Ref<any> = ref(null)
+let bivariate_legend_income = ref(null)
+let bivariate_legend_health = ref(null)
+
+let bivariate_legend_zipped = ref([])
+
+// This comes with the caveat that we can't use it in a v-if statement to determine if
+// we should display the legend, but that's not too bad since we can just 
+// check the income and health metrics individually
+let bivariate_scale_metrics = ref({income_metric: 'none', health_metric: 'none'})
 
 
 function pickData(choice?: string) {
@@ -173,10 +211,18 @@ function reverse(a: readonly any[]) {
 }
 
 function getIncomeMetric(d) {
-    if(agi_scale.value == true) {
+    if(income_metric.value == 'agi') {
         return d.properties.avg_agi
     } else {
         return d.properties.gini
+    }
+}
+
+function getHealthMetric(d) {
+    if(health_metric.value === 'none') {
+        return 0
+    } else {
+        return d.properties.health_metrics.get(health_metric.value)
     }
 }
 
@@ -210,26 +256,24 @@ function getColor(d) {
         scaleLevel.value = level.value
         
     }
-    if(scaleClusters.value === null || cluster_metric_agi.value !== agi_scale.value) {
-        
 
-        
+    if(scaleClusters.value === null || cluster_income_metric.value !== income_metric.value) {
         let pnp_domain   = pickData("counties").filter(c => c.properties.group.has('pnp')).map(v => getIncomeMetric(v))
-        
-        
         let rnr_domain   = pickData("counties").filter(c => c.properties.group.has('rnr')).map(v => getIncomeMetric(v))
         let pnr_domain   = pickData("counties").filter(c => c.properties.group.has('pnr')).map(v => getIncomeMetric(v))
         let rnp_domain   = pickData("counties").filter(c => c.properties.group.has('rnp')).map(v => getIncomeMetric(v))
         let mixed_domain = pickData("counties").filter(c => c.properties.group.has('rnp') || c.properties.group.has('pnr')).map(v => getIncomeMetric(v))
+        let full_domain  = pickData("counties").map(v => getIncomeMetric(v))
         var clusterScales;
         var clusterLegends;
-        if(agi_scale.value === true) {
+        if(income_metric.value === 'agi') {
             clusterScales = {
                 pnpScale: d3.scaleQuantile(pnp_domain, d3.schemeBlues[9]),
                 rnrScale: d3.scaleQuantile(rnr_domain, d3.schemeBlues[9]),
                 pnrScale: d3.scaleQuantile(pnr_domain, d3.schemeBlues[9]),
                 rnpScale: d3.scaleQuantile(rnp_domain, d3.schemeBlues[9]),
                 mixedScale: d3.scaleQuantile(mixed_domain, d3.schemeBlues[9]),
+                fullScale: d3.scaleQuantile(full_domain, d3.schemeBlues[9]),
             }
 
             clusterLegends = {
@@ -237,6 +281,7 @@ function getColor(d) {
                 rnrLegend: getBuckets(rnr_domain.sort((a, b) => a-b), clusterScales.rnrScale),
                 pnrLegend: getBuckets(pnr_domain.sort((a, b) => a-b), clusterScales.pnrScale),
                 rnpLegend: getBuckets(rnp_domain.sort((a, b) => a-b), clusterScales.rnpScale),
+                fullLegend: getBuckets(full_domain.sort((a, b) => a-b), clusterScales.fullScale),
             }
         } else {
             clusterScales = {
@@ -245,69 +290,140 @@ function getColor(d) {
                 pnrScale: d3.scaleQuantile(pnr_domain, d3.schemeReds[9]),
                 rnpScale: d3.scaleQuantile(rnp_domain, d3.schemeReds[9]),
                 mixedScale: d3.scaleQuantile(mixed_domain, d3.schemeReds[9]),
+                fullScale: d3.scaleQuantile(full_domain, d3.schemeReds[9]),
             }
             clusterLegends = {
                 pnpLegend: getBuckets(pnp_domain.sort((a, b) => a-b), clusterScales.pnpScale),
                 rnrLegend: getBuckets(rnr_domain.sort((a, b) => a-b), clusterScales.rnrScale),
                 pnrLegend: getBuckets(pnr_domain.sort((a, b) => a-b), clusterScales.pnrScale),
                 rnpLegend: getBuckets(rnp_domain.sort((a, b) => a-b), clusterScales.rnpScale),
+                fullLegend: getBuckets(full_domain.sort((a, b) => a-b), clusterScales.fullScale),
             }
         }
         
         scaleClusters.value = clusterScales
         legendClusters.value = clusterLegends
-        window.scales = scaleClusters
-        cluster_metric_agi.value = agi_scale.value
+        window.legendClusters = legendClusters
+        cluster_income_metric.value = income_metric.value
+    }
+
+    
+    if(health_metric.value !== 'none' && health_metric.value !== scaleHealthMetric.value && income_metric.value == 'none') {
+        
+        let healthDomain = pickData().map((c) => c.properties.health_metrics.get(health_metric.value))//.filter(n => n !== undefined)
+        window.healthDomain = healthDomain
+        healthScale.value = d3.scaleQuantile(healthDomain, d3.schemePurples[9])
+        window.healthScale = healthScale
+        scaleHealthMetric.value = health_metric.value
+
+        let hd_sorted = healthDomain.sort((a, b) => a-b)
+        // scaleAGI.value = d3.scaleQuantile(pickData().map(v => v.properties.health_metrics.get(health_metric)), d3.schemeBlues[9])
+        healthLegend.value = getBuckets(hd_sorted, healthScale.value).sort((a, b) => a[0] - b[0])
+    }
+
+    if(income_metric.value !== 'none' && health_metric.value !== 'none' && ( bivariate_scale.value === null || bivariate_scale_metrics.value.income_metric !== income_metric.value || bivariate_scale_metrics.value.health_metric !== health_metric.value )) {
+        let income_domain = pickData().map(v => getIncomeMetric(v)).sort((a, b) => a-b)
+        let health_domain = pickData().map(v => getHealthMetric(v)).sort((a, b) => a-b)
+        let income_scale = d3.scaleQuantile(income_domain, [0, 1, 2])
+        let health_scale = d3.scaleQuantile(health_domain, [0, 1, 2])
+        // Must accept two values from the domain as input and return a color value as output
+        let _bivariate_scale = (income: number, health: number) => {
+            let i = income_scale(income)
+            let h = health_scale(health)
+            return bivariate_colors[ h * bivaraite_side_length + i ]
+        }
+        bivariate_legend.value = legend(income_metric.value, 'Health Metric', income_scale.quantiles(), health_scale.quantiles())
+
+        bivariate_legend_income.value = getBuckets(income_domain, (i) => _bivariate_scale(i, 0))
+        bivariate_legend_health.value = getBuckets(health_domain, (h) => _bivariate_scale(0, h))
+        bivariate_legend_zipped.value = d3.zip(bivariate_legend_income.value, bivariate_legend_health.value)
+        bivariate_scale.value = _bivariate_scale
+        bivariate_scale_metrics.value.income_metric = income_metric.value
+        bivariate_scale_metrics.value.health_metric = health_metric.value
+        
     }
 
     if(level.value === "counties") {
         if(cluster.value === "none") {
-            if(agi_scale.value === true) {
+            if(income_metric.value === 'agi' && health_metric.value === 'none') {
                 return scaleAGI.value(d.properties.avg_agi)
-            } else {
+            } else if(income_metric.value === 'gini' && health_metric.value === 'none') {
                 return scaleG.value(d.properties.gini)
+            } else if(income_metric.value === 'none' && health_metric.value !== 'none') {
+                return scaleHealthMetric.value(d.properties.health_metrics.get(health_metric.value))
+            } else if(income_metric.value !== 'none' && health_metric.value !== 'none') {
+                return bivariate_scale.value(getIncomeMetric(d), getHealthMetric(d))
             }
             
-        } 
+        }
         let focus_color = "yellow"
-        let {pnpScale, rnrScale, pnrScale, rnpScale, mixedScale} = scaleClusters.value
-        if(cluster.value === "pnp" && d.properties.group.has('pnp') ) {
-            if(d.properties.focus.get('pnp') === true) {
-                return focus_color
+        let {pnpScale, rnrScale, pnrScale, rnpScale, mixedScale, fullScale} = scaleClusters.value
+        // Use single scale coloring
+        if(income_metric.value === 'none' || health_metric.value === 'none') {
+
+            if(cluster.value === "pnp" && (d.properties.group.has('pnp') || color_all_with_clusters.value) ) {
+                if(d.properties.focus.get('pnp') === true) {
+                    return focus_color
+                }
+                if(color_all_with_clusters.value) {
+                    return fullScale(getIncomeMetric(d))
+                }
+                return pnpScale(getIncomeMetric(d))
             }
-            return pnpScale(getIncomeMetric(d))
-        }
-        if(cluster.value === "rnr" && d.properties.group.has("rnr") ) {
-            if(d.properties.focus.get('rnr') === true) {
-                return focus_color
+            if(cluster.value === "rnr" && (d.properties.group.has("rnr") || color_all_with_clusters.value)) {
+                if(d.properties.focus.get('rnr') === true) {
+                    return focus_color
+                }
+                if(color_all_with_clusters.value) {
+                    return fullScale(getIncomeMetric(d))
+                }
+                return rnrScale(getIncomeMetric(d))
             }
-            return rnrScale(getIncomeMetric(d))
-        }
-        if(cluster.value === "pnr" && d.properties.group.has("pnr") ) {
-            if(d.properties.focus.get('pnr') === true) {
-                return focus_color
+            if(cluster.value === "pnr" && (d.properties.group.has("pnr") || color_all_with_clusters.value)) {
+                if(d.properties.focus.get('pnr') === true) {
+                    return focus_color
+                }
+                if(color_all_with_clusters.value) {
+                    return fullScale(getIncomeMetric(d))
+                }
+                return pnrScale(getIncomeMetric(d))
             }
-            return pnrScale(getIncomeMetric(d))
-        }
-        if(cluster.value === "rnp" && d.properties.group.has("rnp") ) {
-            if(d.properties.focus.get('rnp') === true) {
-                return focus_color
+            if(cluster.value === "rnp" && (d.properties.group.has("rnp") || color_all_with_clusters.value) ) {
+                if(d.properties.focus.get('rnp') === true) {
+                    return focus_color
+                }
+                if(color_all_with_clusters.value) {
+                    return fullScale(getIncomeMetric(d))
+                }
+                return rnpScale(getIncomeMetric(d))
             }
-            return rnpScale(getIncomeMetric(d))
+        } else {
+            // apply bivariate coloring
+            if(d.properties.group.has(cluster.value) || color_all_with_clusters.value) {
+                if(d.properties.focus.get(cluster.value) === true) {
+                    return focus_color
+                }
+                return bivariate_scale.value(getIncomeMetric(d), getHealthMetric(d))
+            }
+            
         }
+
         return "#ccc"
     } else {
-        if(agi_scale.value === true)
+        if(income_metric.value === 'agi' && health_metric.value === 'none') {
             return scaleAGI.value(d.properties.avg_agi)
-        else 
+        } else if(income_metric.value === 'gini' && health_metric.value === 'none') {
             return scaleG.value(d.properties.gini)
+        } else if(income_metric.value === 'none' && health_metric.value !== 'none') {
+            return healthScale.value(d.properties.health_metrics.get(health_metric.value))
+        } else if(income_metric.value !== 'none' && health_metric.value !== 'none') {
+            return bivariate_scale.value(getIncomeMetric(d), getHealthMetric(d))
+        }
+        // bivariate color scale will go here
     }
-
-    
-        
-    
 }
 
+let bivariate_legend = ref(null)
 
 function getTitle(d) {
     if(level.value == 'counties') {
@@ -320,90 +436,6 @@ function getTitle(d) {
 
 
 
-function trivariateLegend() {
-    trivariatePlot()
-    let ticks = 5
-    let scale = 15
-    let strokesize = 0.2
-    let translate_x = 10
-    let translate_y = translate_x * (Math.sqrt(3)/2)
-    let base = 10
-    let height = base * (Math.sqrt(3)/2)
-    let points = [[0, 0], [base, 0], [base/2, height]]
-    let equilateral = `${0},${0} ${base},${0} ${base/2},${height}`
-    
-
-
-
-    let g = d3.create('svg:g')
-    let triangles = ticks - 1
-    for(var i = 1; i <= triangles; i++) {
-        let polygon = g.append('polygon')
-        
-        polygon
-            .attr('points', equilateral)
-            .style('fill', 'cyan')
-            .style('stroke', 'black')
-            .style('stroke-width', strokesize)
-            .attr('transform', `translate(${translate_x*i}, 0) rotate(180)`)
-    }
-    triangles -= 1
-    for(var i = 1; i <= triangles; i++) {
-        g
-        .append('polygon')
-            .attr('points', equilateral)
-            .style('fill', 'cyan')
-            .style('stroke', 'black')
-            .style('stroke-width', strokesize)
-            .attr('transform', `translate(${translate_x*i - translate_x/2}, ${-(translate_y)}) rotate(0)`)
-    }
-    for(var i = 1; i <= triangles; i++) {
-        g
-        .append('polygon')
-            .attr('points', equilateral)
-            .style('fill', 'cyan')
-            .style('stroke', 'black')
-            .style('stroke-width', strokesize)
-            .attr('transform', `translate(${translate_x*i + translate_x/2}, ${-(translate_y)}) rotate(180)`)
-    }
-    triangles -= 1
-    for(var i = 1; i <= triangles; i++) {
-        g
-        .append('polygon')
-            .attr('points', equilateral)
-            .style('fill', 'cyan')
-            .style('stroke', 'black')
-            .style('stroke-width', strokesize)
-            .attr('transform', `translate(${translate_x*i}, ${-(translate_y*2)}) rotate(0)`)
-    }
-    for(var i = 1; i <= triangles; i++) {
-        g
-        .append('polygon')
-            .attr('points', equilateral)
-            .style('fill', 'cyan')
-            .style('stroke', 'black')
-            .style('stroke-width', strokesize)
-            .attr('transform', `translate(${translate_x*i + translate_x}, ${-(translate_y*2)}) rotate(180)`)
-    }
-    
-    triangles -= 1
-    g
-    .append('polygon')
-        .attr('points', equilateral)
-        .style('fill', 'cyan')
-        .style('stroke', 'black')
-        .style('stroke-width', strokesize)
-        .attr('transform', `translate(${1.5*translate_x}, ${-(translate_y*3)}) rotate(0)`)
-    g
-    .append('polygon')
-        .attr('points', equilateral)
-        .style('fill', 'cyan')
-        .style('stroke', 'black')
-        .style('stroke-width', strokesize)
-        .attr('transform', `translate(${2.5*translate_x}, ${-(translate_y*3)}) rotate(180)`)
-    
-    return g
-}
 
 
 function showPlot() {
@@ -453,19 +485,25 @@ function showPlot() {
     svg.value.call(zoom)
     if(document.getElementById('plot')?.childNodes.length == 0) {
         document.getElementById('plot')?.appendChild(svg.value.node())
-        // showScatter()
-        // showSpike()
         window.gg = gg
-        gg.value.append(() => trivariateLegend().node())
-        // document.getElementById('scatter')?.append(chart(pickData()))
+        // let leg_svg = d3.create('svg').append(legend()).attr("transform", "translate(870,450)");
+        
+        // @ts-ignore
+        // document.getElementById('scatter').innerHTML = legend()
     }
 
 
     
 }
 
-
+/**
+ * TODO: Must find a way to update the plot "in-place" rather than delete it 
+ * to improve interactivity. When colors or scales are changed we don't want 
+ * the plot to be unzoomed and recentered
+ */
 function updatePlot() {
+    window.county_fill = county_fill
+    window.state_fill = state_fill
     gg.value.remove()
     map_shapes.value.remove()
 
@@ -605,248 +643,7 @@ function countyComparisons() {
     socket.value.emit('neighbors', 0.1, 0.9)
 }
 
-/**
- * 
- * Spike Map - decided not to use this since it was very cluttered and difficult to 
- * see with the colored map in the background, especially in the county view.
- * 
- * Not removing it yet just to keep it for reference.
- * 
- */
-// Copyright 2022 Observable, Inc.
-// Released under the ISC license.
-// https://observablehq.com/@d3/spike-map
-//  function SpikeMap(data, {
-//     position = d => d, // given d in data, returns the [longitude, latitude]
-//     value = () => undefined, // given d in data, returns the quantitative value
-//     title, // given a datum d, returns the hover text
-//     scale = (domain, range) => d3.scaleQuantize(domain, range), // type of length scale
-//     domain, // [0, max] values; input of length scale; must start at zero
-//     maxLength = 200, // maximum length of spikes
-//     width = 640, // outer width, in pixels
-//     height, // outer height, in pixels
-//     projection, // a D3 projection; null for pre-projected geometry
-//     features, // a GeoJSON feature collection for the background
-//     borders, // a GeoJSON object for stroking borders
-//     spike = (length, width = 7) => `M${-width / 2},0L0,${-length}L${width / 2},0`,
-//     outline = projection && projection.rotate ? {type: "Sphere"} : null, // a GeoJSON object for the background
-//     backgroundFill = "#e0e0e0", // fill color for background
-//     backgroundStroke = "white", // stroke color for borders
-//     backgroundStrokeWidth, // stroke width for borders
-//     backgroundStrokeOpacity, // stroke width for borders
-//     backgroundStrokeLinecap = "round", // stroke line cap for borders
-//     backgroundStrokeLinejoin = "round", // stroke line join for borders
-//     fill = "pink", // fill color for spikes
-//     fillOpacity = 0.3, // fill opacity for spikes
-//     stroke = "black", // stroke color for spikes
-//     strokeWidth, // stroke width for spikes
-//     strokeOpacity, // stroke opacity for spikes
-//     legendX = width - 20,
-//     legendY = height - 20,
-//   } = {}) {
-//     // Compute values.
-//     const I = d3.map(data, (_, i) => i);
-//     const V = d3.map(data, value)
-//     const P = d3.map(data, position);
-//     const T = title == null ? null : d3.map(data, title);
-  
-//     // Compute default domains.
-//     if (domain === undefined) domain = [0, d3.max(V)];
-  
-//     // Construct scales.
-//     const length = scale(V.sort((a, b) => a-b), [1, 5, 20, 40, 60, 80, 100]);
-  
-//     // Compute the default height. If an outline object is specified, scale the projection to fit
-//     // the width, and then compute the corresponding height.
-//     if (height === undefined) {
-//       if (outline === undefined) {
-//         height = 400;
-//       } else {
-//         const [[x0, y0], [x1, y1]] = d3.geoPath(projection.fitWidth(width, outline)).bounds(outline);
-//         const dy = Math.ceil(y1 - y0), l = Math.min(Math.ceil(x1 - x0), dy);
-//         projection.scale(projection.scale() * (l - 1) / l).precision(0.2);
-//         height = dy;
-//       }
-//     }
-  
-//     // Construct a path generator.
-//     const path = d3.geoPath(projection);
-  
-//     const svg = d3.select("svg")
- 
-  
-//     const legend = svg.append("g")
-//         .attr("fill", "#777")
-//         .attr("text-anchor", "middle")
-//         .attr("font-family", "sans-serif")
-//         .attr("font-size", 10)
-//       .selectAll("g")
-//         .data(length.ticks(4).slice(1).reverse())
-//       .join("g")
-//         .attr("transform", (d, i) => `translate(${legendX - i * 18},${legendY})`);
-  
-//     legend.append("path")
-//         .attr("fill", "red")
-//         .attr("fill-opacity", 0.3)
-//         .attr("stroke", "red")
-//         .attr("d", d => spike(length(d)));
-  
-//     legend.append("text")
-//         .attr("dy", "1.3em")
-//         .text(length.tickFormat(4, "s"));
-  
-//     let spikes = gg.value.append('g')
-    
-//     spikes.attr("fill", fill)
-//         .attr("fill-opacity", fillOpacity)
-//         .attr("stroke", stroke)
-//         .attr("stroke-width", strokeWidth)
-//         .attr("stroke-opacity", strokeOpacity)
-//       .selectAll("path")
-//       .data(d3.range(data.length)
-//           .filter(i => P[i])
-//           .sort((i, j) => d3.ascending(P[i][1], P[j][1]) || d3.ascending(P[i][0], P[j][0])))
-//       .join("path")
-//         .attr("transform", projection == null
-//             ? i => `translate(${P[i]})`
-//             : i => `translate(${projection(P[i])})`)
-//         .attr("d", i => spike(length(V[i])))
-//         .call(T ? path => path.append("title").text(i => T[i]) : () => {});
-//     return spikes;
-//   }
-// function centroid(feature: any) { 
-//   return path.centroid(feature);
-// }
-// let chart = (income_metric, statemap, countymap) => SpikeMap(income_metric, {
-//   value: (d) => {
-//     let {income_metric, statefips, countyfips} = d
-//     return income_metric
-//   },
-//   position(d) {
-//     let {income_metric, statefips, countyfips} = d
-//     if(level.value == 'counties') {
-//         const county = countymap.get(countyfips);
-//         return centroid(county);
-//     } else {
-//         let state = statemap.get(statefips)
-//         return centroid(state)
-//     }
-    
-//   },
-//   title: (d) => {
-//     let {income_metric, statefips, countyfips} = d
-//     const state = statemap.get(statefips)
-//     const county = countymap.get(countyfips)
-//     return `${county?.properties.name}, ${state?.properties.name}\n${(Number(income_metric)).toLocaleString("en")}`;
-//   },
-//   features: county_fill.value,
-//   borders: county_mesh.value,
-//   width: 975,
-//   height: 610
-// })
-
-
-// function showSpike() {
-
-//     let countymap = new Map(county_fill.value.map(d => [d.id, d]))
-//     let statemap = new Map(state_fill.value.map(d => [d.id, d]))
-
-//     let data = pickData().map((d: any) => ({
-//         'income_metric': getIncomeMetric(d),
-//         'statefips': d.id[0] + d.id[1],
-//         'countyfips': d.id
-//     }))
-//     chart(data, statemap, countymap)
-// }
-
-
-// function showScatter() {
-//     // Specify the chart?s dimensions.
-//   const width = 928;
-//   const height = 600;
-//   const marginTop = 20;
-//   const marginRight = 30;
-//   const marginBottom = 30;
-//   const marginLeft = 40;
-
-//   d3.select("svg[data-scatter=true]").remove()
-
-//   // Create the horizontal (x) scale, positioning N/A values on the left margin.
-//   const x = d3.scaleLinear()
-//       .domain([0, d3.max(pickData(), d => getIncomeMetric(d))]).nice()
-//       .range([marginLeft, width - marginRight])
-//       .unknown(marginLeft);
-
-//   // Create the vertical (y) scale, positioning N/A values on the bottom margin.
-//   const y = d3.scaleLinear()
-//       .domain([0, d3.max(pickData(), d => getIncomeMetric(d))]).nice()
-//       .range([height - marginBottom, marginTop])
-//       .unknown(height - marginBottom);
-
-//   // Create the SVG container.
-//   const svg = d3.create("svg")
-//       .attr("viewBox", [0, 0, width, height])
-//       .attr("data-scatter", true)
-//       .property("value", []);
-
-//   // Append the axes.
-//   svg.append("g")
-//       .attr("transform", `translate(0,${height - marginBottom})`)
-//       .call(d3.axisBottom(x))
-//       .call(g => g.select(".domain").remove())
-//       .call(g => g.append("text")
-//           .attr("x", width - marginRight)
-//           .attr("y", -4)
-//           .attr("fill", "#000")
-//           .attr("font-weight", "bold")
-//           .attr("text-anchor", "end")
-//           .text("Health vs. Income"));
-
-//   svg.append("g")
-//       .attr("transform", `translate(${marginLeft},0)`)
-//       .call(d3.axisLeft(y))
-//       .call(g => g.select(".domain").remove())
-//       .call(g => g.select(".tick:last-of-type text").clone()
-//           .attr("x", 4)
-//           .attr("text-anchor", "start")
-//           .attr("font-weight", "bold")
-//           .text("Health Outcome (normalized to maximum observation)"));
-
-//   // Append the dots.
-//   const dot = svg.append("g")
-//       .attr("fill", "none")
-//       .attr("stroke", "steelblue")
-//       .attr("stroke-width", 1.5)
-//     .selectAll("circle")
-//     .data(pickData())
-//     .join("circle")
-//       .attr("transform", d => `translate(${x(getIncomeMetric(d))},${y(getIncomeMetric(d))})`)
-//       .attr("r", 3);
-
-//   // Create the brush behavior.
-//   svg.call(d3.brush().on("start brush end", ({selection}) => {
-//     let value = [];
-//     if (selection) {
-//       const [[x0, y0], [x1, y1]] = selection;
-//       value = dot
-//         .style("stroke", "gray")
-//         .filter(d => x0 <= x(getIncomeMetric(d)) && x(getIncomeMetric(d)) < x1
-//                 && y0 <= y(getIncomeMetric(d)) && y(getIncomeMetric(d)) < y1)
-//         .style("stroke", "steelblue")
-//         .data();
-//     } else {
-//       dot.style("stroke", "steelblue");
-//     }
-
-//     // Inform downstream cells that the selection has changed.
-//     svg.property("value", value).dispatch("input");
-//   }));
-
-//   document.getElementById('scatter')?.append(svg.node())
-// }
-
 onMounted(() => {
-    trivariatePlot()
     let query = `
     SELECT STATE_COUNTY_FIPS, GINI, STATE_NAME
     FROM cps_00004.county_gini
@@ -882,9 +679,9 @@ onMounted(() => {
     `
 
     let health_state_query = `
-    SELECT STATE_FIPS, MEASURE as measure, avg(DATA_VALUE) as avg_data_value
+    SELECT STATE_FIPS, MEASURE, avg_data_value
     FROM (
-            SELECT STATE_NAME, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
+            SELECT any(STATE_NAME) as STATE_NAME, MEASURE, avg(DATA_VALUE) as avg_data_value 
             FROM cps_00004.places_county 
             WHERE MEASURE LIKE '%heart%' OR MEASURE LIKE '%Cancer%' OR MEASURE LIKE '%teeth%' OR MEASURE LIKE '%dentist%' OR MEASURE LIKE '%Fair or poor self-rated health status among adults%' OR MEASURE LIKE '%Stroke among adults aged%'
             GROUP BY COUNTY_FIPS, MEASURE
@@ -974,17 +771,34 @@ onMounted(() => {
         }
 
         if(data['name'] === 'health_county') {
-            let ca = new Map<number, [string, number]>(data['data'].map((row) => { return [row[0], [row[1], row[2]]  ]}))
+            let reduced = data['data'].reduce(
+                (acc: Map<number, Map<string, number>>, row: any[]) => { 
+                    let county_fips = Number(row[0])
+                    let measure = row[1]
+                    let data_value = row[2]
+                    if(!acc.has(county_fips)) {
+                        acc.set(county_fips, new Map<string, number>())
+                    }
+                    let county_map = acc.get(county_fips)
+                    county_map?.set(measure, data_value)
+                    acc.set(county_fips, county_map)
+                    return acc  
+                }, new Map<number, Map<string, number>>())
+            
             let with_health = county_fill.value.map((c) => {
                 let sc_fips = Number(c.id)
 
+                
                 if(c.properties.health_metrics === undefined) {
                     c.properties.health_metrics = new Map<string, number>()
                 }
 
-                if(ca.has(sc_fips)) {
-                    let [measure, datavalue] = ca.get(sc_fips) as [string, number]
-                    c.properties.health_metrics.set(measure, datavalue)
+                if(reduced.has(sc_fips)) {
+                    let county_map = reduced.get(sc_fips) as [string, number]
+                    c.properties.health_metrics = county_map
+                    Array.from(county_map.keys()).forEach((measure) => {
+                        health_metric_options.value.add(measure)
+                    })
                 }
                 return c
             })
@@ -994,18 +808,38 @@ onMounted(() => {
             // }
         }
 
-        if(data['name'] === 'health_county') {
-            let sa = new Map<number, [string, number]>(data['data'].map((row) => { return [row[0], [row[1], row[2]]  ]}))
+        if(data['name'] === 'health_state') {
+            let reduced = data['data'].reduce(
+                (acc: Map<number, Map<string, number>>, row: any[]) => { 
+                    let state_fips = Number(row[0])
+                    let measure = row[1]
+                    let data_value = row[2]
+                    if(!acc.has(state_fips)) {
+                        acc.set(state_fips, new Map<string, number>())
+                    }
+                    let state_map = acc.get(state_fips)
+                    state_map?.set(measure, data_value)
+                    acc.set(state_fips, state_map)
+                    return acc  
+                }, new Map<number, Map<string, number>>())
             let with_health = state_fill.value.map((s) => {
                 let s_fips = Number(s.id)
 
+
                 if(s.properties.health_metrics === undefined) {
+                    // this is overwritten for almost all states anyway, but keep this
+                    // here for any states that do not show up in the query result.
+                    // Helps make the frontend processing consistent later on
                     s.properties.health_metrics = new Map<string, number>()
                 }
 
-                if(sa.has(s_fips)) {
-                    let [measure, datavalue] = sa.get(s_fips) as [string, number]
-                    s.properties.health_metrics.set(measure, datavalue)
+                if(reduced.has(s_fips)) {
+                    let state_map = reduced.get(s_fips) as Map<string, number>
+                    s.properties.health_metrics = state_map
+                    Array.from(state_map.keys()).forEach((measure) => {
+                        health_metric_options.value.add(measure)
+                    })
+                    
                 }
                 return s
             })
@@ -1013,7 +847,6 @@ onMounted(() => {
         }
 
     })
-    window.agi_scale = agi_scale
     fetch(`http://localhost:9001/counties-albers-10m.json`)
     .then((res) => {
         
@@ -1047,17 +880,11 @@ onMounted(() => {
     })
     
     
-    
-    document.querySelector("#scaleToggle").bootstrapToggle({
-        on: 'AGI',
-        off: 'Gini'
-    });
 
     document.querySelector("#stateScaleToggle").bootstrapToggle({
         off: 'National',
         on: 'State'
     });
-
 
     
 
@@ -1069,6 +896,23 @@ function doCluster() {
     countyComparisons()
 }
 
+function updateIncomeMetric(e: Event) {
+    let im = e.target.value
+    income_metric.value = im
+    updatePlot()
+}
+
+function colorAllMouseDown() {
+    console.log("colorAllMouseDown")
+    color_all_with_clusters.value = true
+    updatePlot()
+}
+
+function colorAllMouseUp() {
+    console.log('colorAllMouseUp')
+    color_all_with_clusters.value = false
+    updatePlot()
+}
 </script>
 <template>
     <div class="row">
@@ -1090,16 +934,38 @@ function doCluster() {
                                 <option key="counties" value="counties">counties</option>
                             </select>
                         </div>
+                        <div class="row my-2">
+                            <p>County Clustering:</p>
+                            <select class="form-select " v-if="level == 'counties'" v-model="cluster" @click="doCluster">
+                                <option key="none" value="none">No Clusters</option>
+                                <option key="pnp" value="pnp">Poor Near Poor</option>
+                                <option key="rnr" value="rnr">Rich Near Rich</option>
+                                <option key="rnp" value="rnp">Rich Near Poor</option>
+                                <option key="pnr" value="pnr">Poor Near Rich</option>
+                            </select>
+                            <select class="form-select" v-else v-model="cluster" disabled>
+                                <option key="none" value="none">No Clusters</option>
+                                <option key="pnp" value="pnp">Poor Near Poor</option>
+                                <option key="rnr" value="rnr">Rich Near Rich</option>
+                                <option key="rnp" value="rnp">Rich Near Poor</option>
+                                <option key="pnr" value="pnr">Poor Near Rich</option>
+                            </select>
+                        </div>
+                        <div v-if="cluster !== 'none'" class="row my-2">
+                            <button 
+                                class="btn btn-outline-primary" 
+                                @mousedown="colorAllMouseDown" 
+                                @mouseup="colorAllMouseUp"
+                                @mouseleave="colorAllMouseUp">Color All</button>
+                            
+                        </div>
                         <div class="row my-3">
-                            <p>Color Coding Metric:</p>
-                            <input 
-                                id="scaleToggle" 
-                                type="checkbox" 
-                                v-model="agi_scale"
-                                @change="updatePlot"
-                                data-toggle="toggle"  
-                                data-onstyle="outline-primary" 
-                                data-offstyle="outline-danger" ></input>
+                            
+                            <select class="form-select" v-model="income_metric" @click="updateIncomeMetric">
+                                <option v-for="metric in income_metric_options" :value="metric" :key="metric">
+                                    {{ metric }}
+                                </option>
+                            </select>
                         </div>
                         <div class="row my-3">
                             <p>Color Coding Scale Domain (non-functional):</p>
@@ -1113,24 +979,15 @@ function doCluster() {
                                 data-offstyle="outline-success" ></input>
                         </div>
                         
+                        
                         <div class="row">
-                            <select class="form-select my-3" v-if="level == 'counties'" v-model="cluster" @click="doCluster">
-                                <option key="none" value="none">No Clusters</option>
-                                <option key="pnp" value="pnp">Poor Near Poor</option>
-                                <option key="rnr" value="rnr">Rich Near Rich</option>
-                                <option key="rnp" value="rnp">Rich Near Poor</option>
-                                <option key="pnr" value="pnr">Poor Near Rich</option>
-                            </select>
-                            <select class="form-select my-3" v-else v-model="cluster" disabled>
-                                <option key="none" value="none">No Clusters</option>
-                                <option key="pnp" value="pnp">Poor Near Poor</option>
-                                <option key="rnr" value="rnr">Rich Near Rich</option>
-                                <option key="rnp" value="rnp">Rich Near Poor</option>
-                                <option key="pnr" value="pnr">Poor Near Rich</option>
+                            <p>Health Metric:</p>
+                            <select class="form-select" v-model="health_metric" @click="updatePlot">
+                                <option v-for="metric in Array.from(health_metric_options.values())" :value="metric">{{ metric }}</option>
                             </select>
                         </div>
-                        <div class="row">
-                            <button class="btn btn-primary" @click="reset()">Reset</button>
+                        <div class="row my-3">
+                            <button class="btn btn-outline-danger" @click="reset()">Reset</button>
                         </div>
                     </div>
                     </div>
@@ -1144,7 +1001,7 @@ function doCluster() {
                     <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="color-legend" >
                     <div class="accordion-body">
                         <div class="row">
-                            <div v-if="agi_scale && cluster == 'none'">
+                            <div v-if="income_metric == 'agi' && cluster == 'none' && health_metric === 'none'">
                                 <p>Adjusted Gross Income (AGI):</p>
                                 <div v-for="elem in legendAGI">
                                     <span class="d-inline-block">
@@ -1155,72 +1012,137 @@ function doCluster() {
                                     <span class="d-inline mx-2">{{'$' + (elem[1] / 1000).toFixed(0) + 'k'}}</span>
                                 </div>
                             </div>
-                            <div v-if="!agi_scale && cluster == 'none'">
+                            <div v-if="income_metric == 'gini' && cluster == 'none' && health_metric === 'none'">
                                 <p>Gini Coefficient:</p>
                                 <div v-for="elem in legendG">
                                     <span class="d-inline-block">
                                         <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
                                     </span>
-                                    <span class="d-inline mx-3" v-if="agi_scale">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
                                     <span class="d-inline mx-1"> - </span>
-                                    <span class="d-inline mx-2" v-if="agi_scale">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
                                 </div>
                             </div>
-                            <div v-if="cluster == 'pnp'">
-                                <p v-if="agi_scale">Adjusted Gross Income (AGI):</p>
+                            <div v-if="cluster == 'pnp' && !color_all_with_clusters">
+                                <p>Cluster-specific Scale</p>
+                                <p v-if="income_metric == 'agi'">Adjusted Gross Income (AGI):</p>
                                 <p v-else>Gini Coefficient:</p>
                                 <div v-for="elem in legendClusters.pnpLegend">
                                     <span class="d-inline-block">
                                         <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
                                     </span>
-                                    <span class="d-inline mx-3" v-if="agi_scale">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
                                     <span class="d-inline mx-1"> - </span>
-                                    <span class="d-inline mx-2" v-if="agi_scale">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
                                 </div>
                             </div>
-                            <div v-if="cluster == 'rnr'">
-                                <p v-if="agi_scale">Adjusted Gross Income (AGI):</p>
+                            <div v-if="cluster == 'rnr' && !color_all_with_clusters">
+                                <p>Cluster-specific Scale</p>
+                                <p v-if="income_metric == 'agi'">Adjusted Gross Income (AGI):</p>
                                 <p v-else>Gini Coefficient:</p>
                                 <div v-for="elem in legendClusters.rnrLegend">
                                     <span class="d-inline-block">
                                         <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
                                     </span>
-                                    <span class="d-inline mx-3" v-if="agi_scale">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
                                     <span class="d-inline mx-1"> - </span>
-                                    <span class="d-inline mx-2" v-if="agi_scale">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
                                 </div>
                             </div>
-                            <div v-if="cluster == 'pnr'">
-                                <p v-if="agi_scale">Adjusted Gross Income (AGI):</p>
+                            <div v-if="cluster == 'pnr' && !color_all_with_clusters">
+                                <p>Cluster-specific Scale</p>
+                                <p v-if="income_metric == 'agi'">Adjusted Gross Income (AGI):</p>
                                 <p v-else>Gini Coefficient:</p>
                                 <div v-for="elem in legendClusters.pnrLegend">
                                     <span class="d-inline-block">
                                         <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
                                     </span>
-                                    <span class="d-inline mx-3" v-if="agi_scale">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
                                     <span class="d-inline mx-1"> - </span>
-                                    <span class="d-inline mx-2" v-if="agi_scale">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
                                     <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
                                 </div>
                             </div>
-                            <div v-if="cluster == 'rnp'">
-                                <p v-if="agi_scale">Adjusted Gross Income (AGI):</p>
+                            <div v-if="cluster == 'rnp' && !color_all_with_clusters">
+                                <p>Cluster-specific Scale</p>
+                                <p v-if="income_metric == 'agi'">Adjusted Gross Income (AGI):</p>
                                 <p v-else>Gini Coefficient:</p>
                                 <div v-for="elem in legendClusters.rnpLegend">
                                     <span class="d-inline-block">
                                         <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
                                     </span>
-                                    <span class="d-inline mx-2">{{ elem[0].toFixed(3) }}</span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
                                     <span class="d-inline mx-1"> - </span>
-                                    <span class="d-inline mx-2">{{ elem[1].toFixed(3) }}</span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
                                 </div>
+                            </div>
+                            <div v-if="color_all_with_clusters">
+                                <p>Global Scale</p>
+                                <p v-if="income_metric == 'agi'">Adjusted Gross Income (AGI):</p>
+                                <p v-else>Gini Coefficient:</p>
+                                <div v-for="elem in legendClusters.fullLegend">
+                                    <span class="d-inline-block">
+                                        <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
+                                    </span>
+                                    <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-else>{{ elem[0].toFixed(3) }}</span>
+                                    <span class="d-inline mx-1"> - </span>
+                                    <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[1]/1000).toFixed(0) + 'k' }}</span>
+                                    <span class="d-inline mx-2" v-else>{{ elem[1].toFixed(3) }}</span>
+                                </div>
+                            </div>
+                            <div v-if="income_metric === 'none' && health_metric !== 'none'">
+                                <p>Health Metric:</p>
+                                <p>{{ health_metric }}</p>
+                                <div v-for="elem in healthLegend">
+                                    <span class="d-inline-block">
+                                        <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
+                                    </span>
+                                    <span class="d-inline mx-2">{{ elem[0].toFixed(1) }}%</span>
+                                    <span class="d-inline mx-1"> - </span>
+                                    <span class="d-inline mx-2">{{ elem[1].toFixed(1) }}%</span>
+                                </div>
+                            </div>
+
+                            <div v-if="income_metric !== 'none' && health_metric !== 'none'">
+                                <div class="row">
+                                    <span class="col-md-6">{{ income_metric }}</span>
+                                    <span class="col-md-6">Health</span>
+                                </div>
+                                <div class="row" v-for="elem in bivariate_legend_zipped">
+                                    <!-- INCOME/X AXIS COLORS -->
+                                    <div class="col-md-6">
+                                        <span class="d-inline-block">
+                                            <div class="d-flex" :style="{backgroundColor: elem[0][2], height: '1em', width: '1em'}"></div>
+                                        </span>
+                                        <span class="d-inline mx-3" v-if="income_metric === 'agi'">{{ '$' + (elem[0][0]/1000).toFixed(0) + 'k' }}</span>
+                                        <span class="d-inline mx-2" v-else>{{ elem[0][0].toFixed(3) }}</span>
+                                        <span class="d-inline mx-1"> - </span>
+                                        <span class="d-inline mx-2" v-if="income_metric === 'agi'">{{ '$' + (elem[0][1]/1000).toFixed(0) + 'k' }}</span>
+                                        <span class="d-inline mx-2" v-else>{{ elem[0][1].toFixed(3) }}</span>
+                                    </div>
+                                    <!-- HEALTH/Y AXIS COLORS -->
+                                    <div class="col-md-6">
+                                        <span class="d-inline-block">
+                                            <div class="d-flex" :style="{backgroundColor: elem[1][2], height: '1em', width: '1em'}"></div>
+                                        </span>
+                                        <span class="d-inline mx-2">{{ elem[1][0].toFixed(1) }}%</span>
+                                        <span class="d-inline mx-1"> - </span>
+                                        <span class="d-inline mx-2">{{ elem[1][1].toFixed(1) }}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Bivariate Legend -->
+                            <div v-if="income_metric !== 'none' && health_metric !== 'none'" v-html="bivariate_legend">
                             </div>
                         </div>
                     </div>
