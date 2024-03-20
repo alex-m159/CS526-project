@@ -19,16 +19,18 @@ interface ClientToServer {
     query: (query: string, name: string) => string
     setup: (query: string) => string
     neighbors: (low_income_perc: number, high_income_perc: number) => any
+    rural_urban_result: (level: string) => any
 }
 
 interface ServerToClient {
     data: (data: {data: any[], end: boolean, name: string}) => any
     setup: (data: {data: any[]}) => any 
     neighbors_result: (data: {pnp: any[], rnr: any[], pnr: any[], rnp: any[]}) => any
+    rural_urban_result: (data: {name: string, data: any[]}) => any
 }
 
 //@ts-ignore
-let socket: Ref<Socket<ServerToClient, ClientToServer>> = ref(io(`ws://localhost:9001/`, {transports: ['websocket', 'polling']}));
+let socket: Ref<Socket<ServerToClient, ClientToServer>> = ref(io(`ws://45.79.137.151:9001/`, {transports: ['websocket', 'polling']}));
 
 let geojson = ref({})
 
@@ -127,6 +129,14 @@ let bivariate_legend_zipped = ref([])
 let bivariate_scale_metrics = ref({income_metric: 'none', health_metric: 'none'})
 
 
+// For population density
+let pop_metric = ref('none')
+let pop_metric_options = ref(['none', 'rucc'])
+let pop_scale = ref(null)
+let pop_legend = ref(null)
+let pop_scale_metric = ref('none')
+let pop_scale_level = ref('states')
+
 function pickData(choice?: string) {
     if(choice == "counties") {
         return county_fill.value
@@ -139,6 +149,8 @@ function pickData(choice?: string) {
         return state_fill.value
     }
 }
+
+window.pickData = pickData
 
 function pickMesh(choice?: string) {
     if(choice == "counties") {
@@ -163,11 +175,22 @@ function zoomed(event: any) {
     // spikes.value.attr("stroke-width", Math.min(1 / transform.k, 1));
     // spikes.value.attr("transform", transform);
 }
+let cluster_plot_links = ref(null)
+let cluster_plot_circles = ref(null)
+
+function zoomed2(event: any) {
+    const {transform} = event;
+    cluster_plot_circles.value.attr("transform", transform)
+    cluster_plot_links.value.attr("transform", transform)
+}
 let zoom = d3.zoom()
     .scaleExtent([0.1, 100])
     .on('zoom', zoomed)
 
-
+let zoom2 = d3.zoom()
+    .scaleExtent([1, 4])
+    .translateExtent([[-Infinity,-300],[900,300]])
+    .on('zoom', zoomed2)
 
 function clicked(event, d) {
     const [[x0, y0], [x1, y1]] = path.bounds(d);
@@ -187,6 +210,58 @@ function clicked(event, d) {
     );
 }
 
+function clickedCluster(event, d) {
+    // const [[x0, y0], [x1, y1]] = path.bounds(d);
+    console.log(d)
+    console.log(event)
+    d3.selectAll("circle[data-highlighted=true]").style("fill", "#555")
+    let selection = d3.select(this)
+    console.log(selection.attr("data-highlighted"))
+    if(!selection.attr("data-highlighted") || selection.attr("data-highlighted") === false) {
+        console.log("Filtering map values")
+        selection.transition().style("fill", "yellow").attr("data-highlighted", true).attr("data-origcolor", selection.style("fill"))
+        if(typeof d.data.data.id == "number") {
+
+            let rucc = d.data.data.id
+            console.log(rucc)
+            map_shapes.value.style("fill", (d) => {
+                if(d.properties.rucc !== rucc) {
+                    return "#ccc"
+                }
+            })
+        }
+    } else {
+        // selection.transition().style("fill", "yellow").attr("data-highlighted", true).attr("data-origcolor", selection.style("fill"))
+        let orig = selection.attr("data-origcolor")
+        selection.transition().style("fill", orig).attr("data-highlighted", undefined)  
+        if(typeof d.data.data.id == "number") {
+
+            let rucc = d.data.data.id
+            map_shapes.value.style("fill", (d) => {
+                if(false) {
+                    return "#ccc"
+                }
+            })
+        }
+    }
+    
+    
+    
+    // event.stopPropagation();
+    // map_shapes.value.transition().style("fill", null);
+    // d3.select(this).transition().style("fill", "yellow");
+    // setTimeout(() => {
+    //     d3.select(this).transition().duration(1000).style("fill", null);    
+    // }, 300)
+    // svg.value.transition().duration(750).call(
+    //     zoom.transform,
+    //     d3.zoomIdentity
+    //         .translate(width / 2, height / 2)
+    //         .scale(Math.min(8, 0.7 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
+    //         .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
+    //     d3.pointer(event, svg.value.node())
+    // );
+}
 
 
 function reset() {
@@ -223,6 +298,14 @@ function getHealthMetric(d) {
         return 0
     } else {
         return d.properties.health_metrics.get(health_metric.value)
+    }
+}
+
+function getPopMetric(d) {
+    if(pop_metric.value === 'none') {
+        return 0
+    } else {
+        return d.properties.rucc
     }
 }
 
@@ -321,6 +404,19 @@ function getColor(d) {
         healthLegend.value = getBuckets(hd_sorted, healthScale.value).sort((a, b) => a[0] - b[0])
     }
 
+    if(pop_metric.value !== 'none' && (pop_metric.value !== pop_scale_metric.value || pop_scale_level.value !== level.value)) {
+       let pop_domain = pickData().map((c) => c.properties.rucc)
+       pop_scale.value = d3.scaleQuantile(pop_domain, reverse(d3.schemeYlGn[9]))
+
+       pop_scale_metric.value = pop_metric.value
+       pop_scale_level.value = level.value
+
+       let pd_sorted = pop_domain.sort((a, b) => a-b)
+       // this will have a reverse sorted order compared to the other metrics since
+       // low RUCC = high population density
+       pop_legend.value = getBuckets(pd_sorted, pop_scale.value).sort((a, b) => b[0] - a[0])
+    }
+
     if(income_metric.value !== 'none' && health_metric.value !== 'none' && ( bivariate_scale.value === null || bivariate_scale_metrics.value.income_metric !== income_metric.value || bivariate_scale_metrics.value.health_metric !== health_metric.value )) {
         let income_domain = pickData().map(v => getIncomeMetric(v)).sort((a, b) => a-b)
         let health_domain = pickData().map(v => getHealthMetric(v)).sort((a, b) => a-b)
@@ -353,6 +449,8 @@ function getColor(d) {
                 return scaleHealthMetric.value(d.properties.health_metrics.get(health_metric.value))
             } else if(income_metric.value !== 'none' && health_metric.value !== 'none') {
                 return bivariate_scale.value(getIncomeMetric(d), getHealthMetric(d))
+            } else if(income_metric.value === 'none' && health_metric.value === 'none' && pop_metric.value !== 'none') {
+                return pop_scale.value(getPopMetric(d))
             }
             
         }
@@ -418,8 +516,9 @@ function getColor(d) {
             return healthScale.value(d.properties.health_metrics.get(health_metric.value))
         } else if(income_metric.value !== 'none' && health_metric.value !== 'none') {
             return bivariate_scale.value(getIncomeMetric(d), getHealthMetric(d))
+        } else if(income_metric.value === 'none' && health_metric.value === 'none' && pop_metric.value !== 'none') {
+            return pop_scale.value(getPopMetric(d))
         }
-        // bivariate color scale will go here
     }
 }
 
@@ -586,9 +685,6 @@ function countyComparisons() {
 
         let with_group = county_fill.value.map((c) => {
             let sc_fips = Number(c.id)
-            if(39075 == sc_fips) {
-                console.log('asdasd')
-            }
             if(c.properties.focus === undefined) {
                 c.properties.focus = new Map<string, boolean>()
             }
@@ -641,6 +737,171 @@ function countyComparisons() {
         
     })
     socket.value.emit('neighbors', 0.1, 0.9)
+}
+
+function ruralUrbanCodes() {
+    socket.value.on('rural_urban_result', (data) => {
+        if(data['name'] == 'state') {
+
+            let kvs = data['data'].map((row) => {
+                let state_fips = Number(row[0])
+                let rucc = Number(row[1])
+                return [state_fips, rucc]
+            })
+            let rucc_by_state: Map<number, number> = new Map(kvs)
+            let with_rucc = state_fill.value.map((state) => {
+                let s_fips = Number(state.id)
+                if(rucc_by_state.has(s_fips)) {
+                    let rucc = rucc_by_state.get(s_fips) as number
+                    state.properties.rucc = rucc
+                }
+                return state
+            })
+            state_fill.value = with_rucc
+        }
+        if(data['name'] == 'county') {
+            let kvs = data['data'].map((row) => {
+                let county_fips = Number(row[1])
+                let rucc = Number(row[2])
+                return [county_fips, rucc]
+            })
+            let rucc_by_county: Map<number, number> = new Map(kvs)
+            let with_rucc = county_fill.value.map((county) => {
+                let c_fips = Number(county.id)
+                if(rucc_by_county.has(c_fips)) {
+                    let rucc = rucc_by_county.get(c_fips) as number
+                    county.properties.rucc = rucc
+                }
+                return county
+            })
+
+            county_fill.value = with_rucc
+            showClustering()
+            
+            updatePlot()
+        }
+    })
+
+    socket.value.emit('rural_urban', 'state')
+    socket.value.emit('rural_urban', 'county')
+
+}
+
+function showClustering() {
+    let ruccToGroupName = (rucc: any) => {
+        if(rucc == 1 || rucc == 2 || rucc == 3) {
+            return `metro county`
+        }
+        if(rucc == 4 || rucc == 6 || rucc == 8) {
+            return `metro adjacent`
+        }
+        if(rucc == 5 || rucc == 7 || rucc == 9) {
+            return `metro non-adjacent`
+        }
+    }
+    let filterRuccUndef = (cs: any[]) => {
+        return cs.filter( (c) => c.properties.rucc !== undefined )
+    }
+    let no_undefs = () => filterRuccUndef(pickData("counties"))
+    
+    let base: any[] = [{'id': 'All Counties', 'parentId': undefined}]
+    let layer2: any[] = [{'id': 'metro', 'parentId': 'All Counties'}, {'id': 'non-metro', 'parentId': 'All Counties'}]
+    let layer3: any[] = [{'id': "metro county",  'parentId': "metro" }, {'id': "metro adjacent",  'parentId': "non-metro" }, {'id': "metro non-adjacent",  'parentId': "non-metro" }]
+    let layer4: any[] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => ({'id': r,  'parentId': ruccToGroupName(r) }))
+    // let layer5: any[] = no_undefs().map((c) => ({'id': Number(c.id),  'parentId': c.properties.rucc }))
+    let all_layers = base
+    .concat(layer2)
+    .concat(layer3)
+    .concat(layer4)
+    // .concat(layer5)
+
+    window.all_layers = all_layers
+
+
+
+    let strat1 = d3.stratify()(all_layers)
+    
+    let root = d3.hierarchy(strat1)
+
+    const dx = 10;
+    const dy = width / (root.height + 1);
+
+    // Create a tree layout.
+    const tree = d3.cluster().nodeSize([dx, dy]);
+
+    // Sort the tree and apply the layout.
+    root.sort((a, b) => d3.ascending(a.data.name, b.data.name));
+    tree(root);
+
+    // Compute the extent of the tree. Note that x and y are swapped here
+    // because in the tree layout, x is the breadth, but when displayed, the
+    // tree extends right rather than down.
+    let x0 = Infinity;
+    let x1 = -x0;
+    root.each(d => {
+        if (d.x > x1) x1 = d.x;
+        if (d.x < x0) x0 = d.x;
+    });
+
+    // Compute the adjusted height of the tree.
+    const height = x1 - x0 + dx * 2;
+
+    window.root = root
+    // Compute the adjusted height of the tree.
+    // const height = x1 - x0 + dx * 2;
+
+    const svg = d3.create("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("viewBox", [-dy / 3, x0 - dx, "800", height])
+        .attr("style", "max-width: 100%; height: 200px; font: 10px sans-serif;");
+
+    let link_container = svg.append("g")
+    cluster_plot_links.value = link_container
+
+    const link = link_container
+        .attr("fill", "none")
+        .attr("stroke", "#555")
+        .attr("stroke-opacity", 0.4)
+        .attr("stroke-width", 1.5)
+        .selectAll()
+            .data(root.links())
+            .join("path")
+            .attr("d", d3.linkHorizontal()
+                .x(d => d.y*0.4)
+                .y(d => d.x*1.9));
+    
+    const container = svg.append("g")
+    
+    cluster_plot_circles.value = container
+    const node = container
+        .attr("stroke-linejoin", "round")
+        .attr("stroke-width", 3)
+    .selectAll()
+    .data(root.descendants())
+    .join("g")
+        .attr("transform", d => `translate(${d.y*0.4},${d.x*1.9})`);
+
+    node.append("circle")
+        .attr("fill", d => d.children ? "#555" : "#555")
+        .attr("r", 8.5)
+        .on("click", clickedCluster);
+
+    node.append("text")
+        .attr("dy", "0.31em")
+        .attr("font-size", "16")
+        .attr("x", d => d.children ? -6 : 6)
+        .attr("text-anchor", d => d.children ? "end" : "start")
+        .attr('transform', "rotate(-10)")
+        .text(d => d.data.id)
+        .attr("stroke", "white")
+        .attr("paint-order", "stroke");
+
+
+    svg.call(zoom2)
+    document.getElementById('cluster')?.append(svg.node())
+
+
 }
 
 onMounted(() => {
@@ -725,8 +986,10 @@ onMounted(() => {
             })
             state_fill.value = with_gini
 
-            if(data['end'] == true) 
+            if(data['end'] == true) {
                 showPlot()
+            }
+                
         }
 
         if(data['name'] == 'county_agi') {
@@ -806,6 +1069,7 @@ onMounted(() => {
             // if(level.value === "counties") {
             //     updatePlot()
             // }
+            ruralUrbanCodes()
         }
 
         if(data['name'] === 'health_state') {
@@ -847,7 +1111,7 @@ onMounted(() => {
         }
 
     })
-    fetch(`http://localhost:9001/counties-albers-10m.json`)
+    fetch(`http://45.79.137.151:9001/counties-albers-10m.json`)
     .then((res) => {
         
         return res.json()
@@ -917,6 +1181,7 @@ function colorAllMouseUp() {
 <template>
     <div class="row">
         <div class="col-md-9" id="plot"></div>
+        <!-- <div class="col-md-9" id="cluster"></div> -->
         <div class="col-md-3">
             <div class="accordion" id="menus">
                 <div class="accordion-item">
@@ -985,6 +1250,15 @@ function colorAllMouseUp() {
                             <select class="form-select" v-model="health_metric" @click="updatePlot">
                                 <option v-for="metric in Array.from(health_metric_options.values())" :value="metric">{{ metric }}</option>
                             </select>
+                        </div>
+                        <div class="row">
+                            <p>Population Density Metric:</p>
+                            <select class="form-select" v-model="pop_metric" @click="updatePlot">
+                                <option v-for="metric in Array.from(pop_metric_options.values())" :value="metric">{{ metric }}</option>
+                            </select>
+                        </div>
+                        <div id="cluster" style="height: 200px">
+
                         </div>
                         <div class="row my-3">
                             <button class="btn btn-outline-danger" @click="reset()">Reset</button>
@@ -1112,6 +1386,23 @@ function colorAllMouseUp() {
                                     <span class="d-inline mx-2">{{ elem[1].toFixed(1) }}%</span>
                                 </div>
                             </div>
+                            <div v-if="pop_metric !== 'none'">
+                                <p v-if="level == 'counties'">Population Density (RUCC):</p>
+                                <p v-else>Population Density (Weighted RUCC Avg.):</p>
+                                <div v-for="elem in pop_legend">
+                                    <span class="d-inline-block">
+                                        <div class="d-flex" :style="{backgroundColor: elem[2], height: '1em', width: '1em'}"></div>
+                                    </span>
+                                    <span v-if="level == 'states'">
+                                        <span class="d-inline mx-2">{{ elem[0].toFixed(2) }}</span>
+                                        <span class="d-inline mx-1"> - </span>
+                                        <span class="d-inline mx-2">{{ elem[1].toFixed(2) }}</span>
+                                    </span>
+                                    <span v-if="level == 'counties'">
+                                        <span class="d-inline mx-2">{{ elem[0] }}</span>
+                                    </span>
+                                </div>
+                            </div>
 
                             <div v-if="income_metric !== 'none' && health_metric !== 'none'">
                                 <div class="row">
@@ -1144,6 +1435,7 @@ function colorAllMouseUp() {
                             <!-- Bivariate Legend -->
                             <div v-if="income_metric !== 'none' && health_metric !== 'none'" v-html="bivariate_legend">
                             </div>
+                            
                         </div>
                     </div>
                     </div>

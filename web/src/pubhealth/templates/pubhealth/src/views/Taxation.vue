@@ -483,7 +483,7 @@ const DIVISION = 7
 onMounted(() => {
     logger.debug("Taxation Component Mounted")
     
-    socket.value = io(`ws://localhost:9001/`, {transports: ['websocket', 'polling']});
+    socket.value = io(`ws://45.79.137.151:9001/`, {transports: ['websocket', 'polling']});
     let query = `
     SELECT avg_agi, avg_tax, state_name, county_name, measure, avg_data_value, REGION, DIVISION 
     FROM (

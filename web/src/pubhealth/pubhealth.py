@@ -176,6 +176,44 @@ def neighboring(low_income_perc, high_income_perc):
     )
 
 
+@socketio.on('rural_urban')
+def rural_urban(level):
+    print(f'Sending rural_urban data for {level}')
+    clickhouse = clickhouse_connect.get_client(host='hub.publichealthhq.xyz', port=18123, username='default', password='Password123!')
+    result = clickhouse.query("""
+    SELECT STATE_FIPS, STATE_NAME, COUNTY_FIPS, TOTAL_POPULATION, RUCC
+    FROM (
+        SELECT DISTINCT STATE_NAME, FIPS as COUNTY_FIPS, TOTAL_POPULATION, RUCC
+        FROM cps_00004.places_county 
+        JOIN cps_00004.rural_urban_codes 
+        ON cps_00004.places_county.COUNTY_FIPS = rural_urban_codes.FIPS 
+    ) as inside
+    JOIN cps_00004.state_fips
+    ON cps_00004.state_fips.STATE_NAME = inside.STATE_NAME
+    """)
+
+    df = pl.from_dicts(result.named_results(), infer_schema_length=400)
+    if level == 'state':
+        statepop = df.group_by(['STATE_FIPS']).agg( pl.col('TOTAL_POPULATION').sum() )
+
+        statepopstep = df.join(statepop, 'STATE_FIPS')\
+        .group_by(['STATE_FIPS', 'COUNTY_FIPS'])\
+        .agg( pl.col('TOTAL_POPULATION').sum() / pl.col('TOTAL_POPULATION_right').first() )
+
+        stateweighted = statepopstep.join(
+            df.select(['STATE_FIPS', 'COUNTY_FIPS', 'RUCC']), on=['STATE_FIPS', 'COUNTY_FIPS'], how='inner')\
+        .select(['STATE_FIPS', 'COUNTY_FIPS', 'TOTAL_POPULATION', 'RUCC'])
+
+        state_result = stateweighted\
+        .with_columns( WEIGHTED_RUCC=pl.col('TOTAL_POPULATION') * pl.col('RUCC'))\
+        .group_by(['STATE_FIPS'])\
+        .agg( pl.col('WEIGHTED_RUCC').sum()).sort('WEIGHTED_RUCC', descending=True)
+        return emit('rural_urban_result', {'name': level, 'data': state_result.rows()})
+    else:
+
+        countyRUCC = df.group_by(['STATE_FIPS', 'COUNTY_FIPS']).agg( pl.col('RUCC').sum() )
+        return emit('rural_urban_result', {'name': level, 'data': countyRUCC.rows()})
+
 
 @app.route("/query", methods=['POST'])
 def provide_data():
