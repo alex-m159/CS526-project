@@ -11,6 +11,8 @@ import * as d3 from "d3";
 import * as topojson from "topojson"
 // import * as turf from "@turf/turf"
 
+let domain = `localhost`
+let port = 9001
 import { bivaraite_side_length, bivariate_colors, legend } from "@/utils/bivariate";
 
 
@@ -30,7 +32,7 @@ interface ServerToClient {
 }
 
 //@ts-ignore
-let socket: Ref<Socket<ServerToClient, ClientToServer>> = ref(io(`ws://45.79.137.151:9001/`, {transports: ['websocket', 'polling']}));
+let socket: Ref<Socket<ServerToClient, ClientToServer>> = ref(io(`ws://${domain}:${port}/`, {transports: ['websocket', 'polling']}));
 
 let geojson = ref({})
 
@@ -1111,7 +1113,7 @@ onMounted(() => {
         }
 
     })
-    fetch(`http://45.79.137.151:9001/counties-albers-10m.json`)
+    fetch(`http://${domain}:${port}/counties-albers-10m.json`)
     .then((res) => {
         
         return res.json()

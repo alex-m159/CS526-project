@@ -17,9 +17,9 @@ import HelloWorld from './components/HelloWorld.vue'
           <li class="nav-item mx-3">
             <RouterLink to="/income-inequality">Income Inequality</RouterLink>
           </li>
-          <!-- <li class="nav-item mx-3">
+          <li class="nav-item mx-3">
             <RouterLink to="/population">Population Density</RouterLink>
-          </li> -->
+          </li>
           <li class="nav-item mx-3">
             <RouterLink to="/taxation">Taxation</RouterLink>
           </li>
