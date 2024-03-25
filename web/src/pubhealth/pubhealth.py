@@ -12,7 +12,7 @@ pool_manager = httputil.get_pool_manager(maxsize=5, num_pools=5)
 
 
 # client2 = clickhouse_connect.get_client(pool_mgr=pool_manager)
-
+CLICK_HOST = 'hub.publichealthhq.xyz'
 
 
 app = create_app()
@@ -28,7 +28,7 @@ def handle_message():
     emit('response', {'field': 'value'})
 
 def ws_respond(query, name, emit): 
-    clickhouse = clickhouse_connect.get_client(host='localhost', port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
+    clickhouse = clickhouse_connect.get_client(host=CLICK_HOST, port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
     # Clickhouse does not support the execution of concurrent queries 
     # on one client, and they recommend using one client per thread.
     with clickhouse.query_row_block_stream(f'{query}') as stream:
@@ -43,7 +43,7 @@ def ws_respond(query, name, emit):
 
 
 def ws_respond_setup(query, emit): 
-    clickhouse = clickhouse_connect.get_client(host='localhost', port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
+    clickhouse = clickhouse_connect.get_client(host=CLICK_HOST, port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
     # Clickhouse does not support the execution of concurrent queries 
     # on one client, and they recommend using one client per thread.
     with clickhouse.query_row_block_stream(f'{query}') as stream:
@@ -74,7 +74,7 @@ def ws_setup(query):
 
 @socketio.on('neighbors')
 def neighboring(low_income_perc, high_income_perc):
-    clickhouse = clickhouse_connect.get_client(host='localhost', port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
+    clickhouse = clickhouse_connect.get_client(host=CLICK_HOST, port=18123, username='default', password='Password123!', pool_mgr=pool_manager)
     print(f'Running neighboring with {low_income_perc}, {high_income_perc}')
     res = clickhouse.query('''
         SELECT STATE_COUNTY_FIPS_left, GINI_left, AVG_AGI_left, STATE_COUNTY_FIPS_right, GINI_right, AVG_AGI_right 
@@ -179,7 +179,7 @@ def neighboring(low_income_perc, high_income_perc):
 @socketio.on('rural_urban')
 def rural_urban(level):
     print(f'Sending rural_urban data for {level}')
-    clickhouse = clickhouse_connect.get_client(host='hub.publichealthhq.xyz', port=18123, username='default', password='Password123!')
+    clickhouse = clickhouse_connect.get_client(host=CLICK_HOST, port=18123, username='default', password='Password123!')
     result = clickhouse.query("""
     SELECT STATE_FIPS, STATE_NAME, COUNTY_FIPS, TOTAL_POPULATION, RUCC
     FROM (
