@@ -36,6 +36,7 @@
         UpdateMap(us.value, incomeData.value);
         UpdateScatter();
     })
+    // display the bubble map
     function ShowMap(us) {
 
         
@@ -93,10 +94,12 @@
             );
         }
 
+        // state selection events
         function clicked(event, d) {
             const [[x0, y0], [x1, y1]] = path.bounds(d);
+            // update selected state
             selectedState.value = d.id;
-            // call line graph
+            // update selected state in scatter plot
             UpdateScatter(selectedState.value);
             event.stopPropagation();
             states.transition().style("fill", null);
@@ -141,6 +144,7 @@
         return combinedData;
     }
 
+    // scatter plot svg
     function setupScatterPlotSVG() {
         const margin = { top: 20, right: 20, bottom: 50, left: 50 },
                 width = 480 - margin.left - margin.right,
@@ -157,6 +161,7 @@
         return { svg, width, height, margin };
     }
 
+    // scatter plot with indiv + family income 
     function UpdateScatter() {
         const { svg, width, height, margin } = setupScatterPlotSVG();
         const data = combineStateData(); 
@@ -194,6 +199,8 @@
             .attr("dy", "1em") 
             .style("text-anchor", "middle")
             .text("Life Expectancy");
+        
+        // scatter plot dots are also togglable 
         // individual income
         if (showIndiviBubbles.value) {
             svg.selectAll(".dot-income")
@@ -254,6 +261,7 @@
         d3.select("#tooltip").style("opacity", 0);
     }
 
+    // update function for the bubble map
     function UpdateMap(us, allIncomeData) {
         const svg = d3.select('#map-chart').select('svg');
         let features = topojson.feature(us, us.objects.states).features;
@@ -276,7 +284,7 @@
             bubblesGroup = g.append('g').attr('class', 'bubbles');
         }
 
-        // remove bubbles based on checkboxes
+        // toggable bubbles
         if (showIndiviBubbles.value) {
             // offset is -5
             updateBubbles(features, bubblesGroup, 'income', 'blue', -5); 
@@ -293,7 +301,7 @@
     }
 
 
-    function updateBubbles(features, bubblesGroup, dataKey, color, offsetX, label) {
+    function updateBubbles(features, bubblesGroup, dataKey, color, offsetX) {
         // remove 0 from the extent so bubble sizes can be scaled off non 0 values
         const validFeatures = features.filter(d => d[dataKey] > 0);
         const extent = d3.extent(validFeatures, d => d[dataKey]);
@@ -323,6 +331,8 @@
             .on('mouseenter', (event, d) => {
                 const [x, y] = d3.pointer(event, svg.node()); 
                 const tooltip = d3.select("#tooltip2");
+                // tooltip position doesn't work very well
+                // not even near the cursor
                 tooltip.style("opacity", 1)
                     .html(`State: ${d.properties.name}<br/>Income: $${d[dataKey]}`)
                     .style("left", `${x - 120}px`)
@@ -388,7 +398,7 @@
             return response.json()
         })
         .then((json) => {
-            console.log(json);
+            //console.log(json);
             us.value = json;
             ShowMap(us.value);
              // make sure json is loaded before calling
@@ -398,7 +408,7 @@
         socket.value?.on('data', (data) =>{
             
             if(data['name'] == 'avg_inc'){
-                console.log('income data');
+                //console.log('income data');
                 //console.log(data['data']);
                 // format data before passing it in to UpdateMap
                 // or else the data is only in an array of arrays
@@ -412,29 +422,29 @@
                 formattedData.forEach(d => {
                     d.STATEFIP = String(d.STATEFIP).padStart(2, '0');
                 })
-                console.log(formattedData)
+                //console.log(formattedData)
                 incomeData.value = formattedData;
                 //console.log(us.value)
                 // merge with features
 
                 UpdateMap(us.value, formattedData);
                 if (data['end'] == true) {
-                    console.log(stateMap);
+                    //console.log(stateMap);
                     incomeData.value.forEach(dataEntry => {
                         //console.log(dataEntry)
                         if (stateMap.has(String(dataEntry.STATEFIP).trim())) {
                             dataEntry.STATENAME = stateMap.get(dataEntry.STATEFIP);
-                            console.log('merged');
+                            //console.log('merged');
                         } else {
                             dataEntry.STATENAME = 'Unknown';
                         }
                     });
-                    console.log(incomeData.value)
+                    //console.log(incomeData.value)
                     socket.value?.emit('query', query2, 'life');
                 }
             }
             if (data['name'] == 'life') {
-                console.log('lifeData');
+                //console.log('lifeData');
                 data['data'].forEach(row => {
                 const newStateFips = row[0].toString().padStart(2, '0');  
                 const newLifeExpectancy = +parseFloat(row[1]).toFixed(1);
@@ -454,7 +464,7 @@
                 });
                 
                 if (data['end'] === true) {
-                    console.log(lifeData.value);
+                    //console.log(lifeData.value);
                     UpdateScatter(); 
                 }
             }
@@ -541,4 +551,4 @@
 </style>
 
 <script scoped>
-</script> 
+</script>
