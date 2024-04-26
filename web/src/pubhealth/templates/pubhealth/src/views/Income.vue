@@ -17,13 +17,21 @@
     const selectedYear = ref(2000);
     const yearRange = ref({min:2000, max:2023});
     const showIndiviBubbles = ref(true);
+    const showFTOTINCBubbles = ref(false);
+
     let stateMap = new Map();
 
     // watch functions watch for changes in value (for interactivity) and then call functions when
     // value is changed
     watch(showIndiviBubbles,(newValue, oldValue)=> {
         UpdateMap(us.value, incomeData.value);
+        UpdateScatter();
     });
+    watch(showFTOTINCBubbles, (newValue, oldValue) => {
+        UpdateMap(us.value, incomeData.value);
+        UpdateScatter();
+    });
+
     watch(selectedYear, (newValue) =>{
         UpdateMap(us.value, incomeData.value);
         UpdateScatter();
@@ -32,7 +40,7 @@
 
         
         const width = 975;
-        const height = 610;
+        const height = 500;
 
         const zoom = d3.zoom()
             .scaleExtent([1, 8])
@@ -57,7 +65,7 @@
             .attr('id', 'zoom-group'); // create zoom group so that UpdateMap bubbles can also zoom
         // #444 gray
         const states = g.append("g")
-            .attr("fill", "#77dd77")
+            .attr("fill", "#cccccc")
             .attr("cursor", "pointer")
             .selectAll("path")
             .data(topojson.feature(us, us.objects.states).features)
@@ -92,7 +100,7 @@
             UpdateScatter(selectedState.value);
             event.stopPropagation();
             states.transition().style("fill", null);
-            d3.select(this).transition().style("fill", "#ccffcc");
+            d3.select(this).transition().style("fill", "#333333");
             svg.transition().duration(750).call(
             zoom.transform,
             d3.zoomIdentity
@@ -112,21 +120,31 @@
         //element.appendChild(svg.node());
         
     }
+    // prep the data for scatter plot
     function combineStateData() {
-        let filteredIncomeData = incomeData.value.filter(dataEntry => dataEntry.YEAR === selectedYear.value);
+        let selectedYearData = selectedYear.value;
+        
+        if (!Object.values(lifeData.value).some(d => d.YEAR === selectedYearData)) {
+            selectedYearData = 2019; 
+        }
+
+        let filteredIncomeData = incomeData.value.filter(dataEntry => dataEntry.YEAR === selectedYearData);
         let combinedData = filteredIncomeData.map(dataEntry => {
-            const lifeEntry = lifeData.value.find(le => le.STATENAME === dataEntry.STATENAME);
+            const key = `${dataEntry.STATEFIP}-${selectedYearData}`;
+            const lifeEntry = lifeData.value[key];
             return {
-            ...dataEntry,
-            LIFE_EXPECTANCY: lifeEntry ? lifeEntry.LIFE_EXPECTANCY : null,
+                ...dataEntry,
+                LIFE_EXPECTANCY: lifeEntry ? lifeEntry.LIFE_EXPECTANCY : null,
             };
         });
+        //console.log("combinedData:", combinedData);
         return combinedData;
     }
+
     function setupScatterPlotSVG() {
         const margin = { top: 20, right: 20, bottom: 50, left: 50 },
-                width = 600 - margin.left - margin.right,
-                height = 400 - margin.top - margin.bottom;
+                width = 480 - margin.left - margin.right,
+                height = 390 - margin.top - margin.bottom;
 
         d3.select("#line-graph svg").remove();
 
@@ -139,27 +157,36 @@
         return { svg, width, height, margin };
     }
 
-    function UpdateScatter(selectedStateFIP) {
+    function UpdateScatter() {
         const { svg, width, height, margin } = setupScatterPlotSVG();
-        const data = combineStateData();
+        const data = combineStateData(); 
+
         const xScale = d3.scaleLinear()
-            .domain([0, d3.max(incomeData.value, d => d.avg_INCTOT) * 1.1])
+            .domain([10000, d3.max(data, d => Math.max(d.avg_INCTOT, d.avg_FTOTVAL)) * 1.1])
             .range([0, width]);
 
+        // y axis range
         const yScale = d3.scaleLinear()
-            .domain([70, d3.max(lifeData.value, d => d.LIFE_EXPECTANCY) * 1.1])
+            .domain([70, 85]) 
             .range([height, 0]);
+
+        // short form x axis ticks to accomodate for family income going into the 100ks
+        const xAxis = d3.axisBottom(xScale)
+            .ticks(width / 80)  
+            .tickFormat(d3.format("~s")); 
+
         svg.append("g")
             .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(xScale));
+            .call(xAxis);
 
         svg.append("g")
             .call(d3.axisLeft(yScale));
 
+        // axis titles
         svg.append("text")             
             .attr("transform", `translate(${width / 2}, ${height + margin.top + 20})`)
             .style("text-anchor", "middle")
-            .text("Average Individual Income");
+            .text("Average Income");
         svg.append("text")
             .attr("transform", "rotate(-90)")
             .attr("y", 0 - margin.left)
@@ -167,110 +194,149 @@
             .attr("dy", "1em") 
             .style("text-anchor", "middle")
             .text("Life Expectancy");
+        // individual income
+        if (showIndiviBubbles.value) {
+            svg.selectAll(".dot-income")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot-income")
+                .attr("cx", d => xScale(d.avg_INCTOT))
+                .attr("cy", d => yScale(d.LIFE_EXPECTANCY))
+                .attr("r", 5)
+                .style("fill", d => d.STATEFIP === selectedState.value ? "blue" : "#c3e0ea")
+                .on("mouseover", tooltipFunction)
+                .on("mouseout", tooltipHideFunction);
+        } else {
+            svg.selectAll(".dot-income").remove(); 
+        }
 
-        const tooltip = d3.select("#tooltip");
-        svg.selectAll(".dot")
-            .data(data)
-            .enter().append("circle")
-            .attr("class", "dot")
-            .attr("cx", d => xScale(d.avg_INCTOT))
-            .attr("cy", d => yScale(d.LIFE_EXPECTANCY))
-            .attr("r", 5)
-            .style("fill", d => stateMap.get(selectedStateFIP) === d.STATENAME ? "red" : "#69b3a2")
-            .on("mouseover", (event, d) => {
-                //TODO: tooltip
-                tooltip.transition()
-                    .duration(200)
-                    .style("opacity", .9);
-                tooltip.html(`State: ${d.STATENAME}<br/>Income: $${d.avg_INCTOT}<br/>Life Expectancy: ${d.LIFE_EXPECTANCY} years`)
-                    .style("left", (event.pageX) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            })
-            .on("mouseleave", () => {
-            tooltip.transition()
-                .duration(500)
-                .style("opacity", 0);
-            });
-        // make sure selected dot is always on top
-        // re-select it and raise it
-        svg.selectAll(".dot")
-            .filter(d => stateMap.get(selectedStateFIP) === d.STATENAME)
+        // family income
+        if (showFTOTINCBubbles.value) {
+            svg.selectAll(".dot-family")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot-family")
+                .attr("cx", d => xScale(d.avg_FTOTVAL))
+                .attr("cy", d => yScale(d.LIFE_EXPECTANCY))
+                .attr("r", 5)
+                .style("fill", d => d.STATEFIP === selectedState.value ? "red" : "#ffc9bb")
+                .on("mouseover", tooltipFunction)
+                .on("mouseout", tooltipHideFunction);
+        } else {
+            svg.selectAll(".dot-family").remove(); 
+        }
+
+        svg.selectAll(".dot-income")
+            .filter(d => d.STATEFIP === selectedState.value)
             .raise() 
-            .style("fill", "red") 
-            .attr("r", 6);
+            .attr("r", 7);
+        svg.selectAll(".dot-family")
+            .filter(d => d.STATEFIP === selectedState.value)
+            .raise() 
+            .attr("r", 7);
     }
-    function hideIndiviBubbles() {
-        d3.select('#map-chart').selectAll('.bubbles circle').remove();
+
+    // show scatter tooltips
+    function tooltipFunction(event, d) {
+        const [x, y] = d3.pointer(event, this);
+        const tooltipOffsetX = 60; 
+        const tooltipOffsetY = 30; 
+
+        d3.select("#tooltip")
+            .style("opacity", 1)
+            .html(`State: ${d.STATENAME}<br/>Income: $${d.avg_INCTOT}<br/>Life Expectancy: ${d.LIFE_EXPECTANCY} years`)
+            .style("left", `${x + tooltipOffsetX}px`)
+            .style("top", `${y + tooltipOffsetY}px`);
     }
-    function UpdateMap(us, incomeData) {
 
-        if(showIndiviBubbles.value) {
-            const filteredIncomeData = incomeData.filter(d => d.YEAR === selectedYear.value);
-            const svg = d3.select('#map-chart').select('svg');
-            let features = topojson.feature(us, us.objects.states).features;
-            const incomeExtent = d3.extent(filteredIncomeData, d => d.avg_INCTOT);
-            const radiusScale = d3.scaleSqrt().domain(incomeExtent).range([2, 30]);
-            const projection = d3.geoAlbersUsa();
-            const path = d3.geoPath().projection(projection);
-            // merge with features
-            
-            //console.log(us);
-            features.forEach(feature => {
-                const centroid = path.centroid(feature);
-                //console.log(filteredIncomeData)
-                //console.log(feature.id);
-                feature.centroid = (!isNaN(centroid[0]) && !isNaN(centroid[1])) ? centroid : [0, 0]; // default to 0,0? 
-                const incomeDatum = filteredIncomeData.find(d => d.STATEFIP == feature.id);
-                feature.income = incomeDatum ? incomeDatum.avg_INCTOT : 0;
-            });
-            //console.log(features.map(d => d.income));
-            //console.log(features.map(d => d.centroid));
-            // append to zoom group so bubbles also zoom
-            const g = svg.select('#zoom-group');
-            let bubblesGroup = g.select('.bubbles');
-            if (bubblesGroup.empty()) {
-                bubblesGroup = g.append('g').attr('class', 'bubbles');
-            }
-            const bubbles = bubblesGroup.selectAll('circle')
-                .data(features, d => d.id);
+    // hide tooltip function
+    function tooltipHideFunction() {
+        d3.select("#tooltip").style("opacity", 0);
+    }
 
-            // need proper enter-update-exit pattern this way bubbles don't get created infinitely
-            // this is to update bubbles by year
-            // remove old bubbles
-            // give bubbles a unique group and id so we don't have copies
-            const enteredBubbles = bubbles.enter().append('circle')
-                .attr('fill', 'blue')
-                .attr('stroke', 'blue')
-                .attr('stroke-width', 1)
-                .attr('fill-opacity', 0.5);
+    function UpdateMap(us, allIncomeData) {
+        const svg = d3.select('#map-chart').select('svg');
+        let features = topojson.feature(us, us.objects.states).features;
+        // filter for year
+        const incomeData = allIncomeData.filter(data => data.YEAR === selectedYear.value);
+        // calculate centroid and inctot, ftotvals
+        const projection = d3.geoAlbersUsa();
+        const path = d3.geoPath().projection(projection);
+        features.forEach(feature => {
+            const centroid = path.centroid(feature);
+            feature.centroid = (!isNaN(centroid[0]) && !isNaN(centroid[1])) ? centroid : [0, 0];
+            const incomeDatum = incomeData.find(d => d.STATEFIP === feature.id);
+            feature.income = incomeDatum ? incomeDatum.avg_INCTOT : 0;
+            feature.ftotval = incomeDatum ? incomeDatum.avg_FTOTVAL : 0;
+        });
 
-            bubbles.merge(enteredBubbles)
-                .attr('cx', d => d.centroid[0])
-                .attr('cy', d => d.centroid[1])
-                .attr('r', d => radiusScale(d.income));
+        const g = svg.select('#zoom-group');
+        let bubblesGroup = g.select('.bubbles');
+        if (bubblesGroup.empty()) {
+            bubblesGroup = g.append('g').attr('class', 'bubbles');
+        }
 
-            bubbles.exit().remove();
-            
+        // remove bubbles based on checkboxes
+        if (showIndiviBubbles.value) {
+            // offset is -5
+            updateBubbles(features, bubblesGroup, 'income', 'blue', -5); 
+        } else {
+            bubblesGroup.selectAll('.bubble.income').remove();
+        }
 
-            // hover tooltips
-            const tooltip2 = d3.select("#tooltip2");
-            enteredBubbles.on('mouseenter', (event, d) => {
-                tooltip2.transition()
-                    .duration(200)
-                    .style("opacity", .9);
-                tooltip2.html(`State: ${d.properties.name}<br/>Income: $${d.income}`)
-                    .style("left", (event.pageX) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            }).on('mouseleave', (event, d) => {
-                tooltip2.transition()
+        if (showFTOTINCBubbles.value) {
+            // offset is +5
+            updateBubbles(features, bubblesGroup, 'ftotval', 'red', 5); 
+        } else {
+            bubblesGroup.selectAll('.bubble.ftotval').remove();
+        }
+    }
+
+
+    function updateBubbles(features, bubblesGroup, dataKey, color, offsetX, label) {
+        // remove 0 from the extent so bubble sizes can be scaled off non 0 values
+        const validFeatures = features.filter(d => d[dataKey] > 0);
+        const extent = d3.extent(validFeatures, d => d[dataKey]);
+        //console.log(`Adjusted extent for ${dataKey}:`, extent);
+
+        const radiusScale = d3.scaleSqrt()
+            .domain(extent) 
+            .range([2, 30]);
+
+        const svg = d3.select('#map-chart').select('svg');
+
+        const bubbles = bubblesGroup.selectAll(`circle.${dataKey}`)
+            .data(validFeatures, d => d.id); 
+
+        const tooltip = d3.select("#tooltip2"); 
+
+        bubbles.enter().append('circle')
+            .merge(bubbles)
+            .attr('class', `bubble ${dataKey}`)
+            .attr('fill', color)
+            .attr('stroke', 'black')
+            .attr('stroke-width', 1)
+            .attr('fill-opacity', 0.5)
+            .attr('cx', d => d.centroid[0] + offsetX)
+            .attr('cy', d => d.centroid[1])
+            .attr('r', d => radiusScale(d[dataKey]))
+            .on('mouseenter', (event, d) => {
+                const [x, y] = d3.pointer(event, svg.node()); 
+                const tooltip = d3.select("#tooltip2");
+                tooltip.style("opacity", 1)
+                    .html(`State: ${d.properties.name}<br/>Income: $${d[dataKey]}`)
+                    .style("left", `${x - 120}px`)
+                    .style("top", `${y - 100}px`);
+            })
+            .on('mouseleave', () => {
+                tooltip.transition()
                     .duration(500)
                     .style("opacity", 0);
-            }); 
-        } else {
-            hideIndiviBubbles();
-        }
-        
+            });
+
     }
+
+
 
     interface ClientToServer {
         query: (query: string, name: string) => string
@@ -308,10 +374,10 @@
         
         // socket & json can't handle decimal values so convert to float
         let query2 = `SELECT
-            STATE_NAME, 
-            toFloat64(LIFE_EXPECTANCY) AS LIFE_EXPECTANCY
+            STATE_FIPS, 
+            toFloat64(LIFE_EXPECTANCY) AS LIFE_EXPECTANCY, YEAR
             FROM cps_00004.life_expectancy
-            WHERE COUNTY IS NULL`
+            WHERE STATE_FIPS IS NOT NULL`
        
         // load geojson
         fetch('/states-10m.json')
@@ -369,51 +435,30 @@
             }
             if (data['name'] == 'life') {
                 console.log('lifeData');
-                const bom = '\ufeff';//
-                data['data'].forEach(row =>{
-                    const newEntry =  {
-                        STATENAME: row[0].startsWith(bom) ? row[0].slice(1) : row[0],
-                        LIFE_EXPECTANCY: +parseFloat(row[1]).toFixed(1)
-                    };
-                    const index = lifeData.value.findIndex(item => item.STATENAME === newEntry.STATENAME);
-                    if (index !== -1) {
-                        lifeData.value[index] = newEntry;
-                    }else {
-                        lifeData.value.push(newEntry);
-                    }
-                })
-                if (data['end'] == true) {
+                data['data'].forEach(row => {
+                const newStateFips = row[0].toString().padStart(2, '0');  
+                const newLifeExpectancy = +parseFloat(row[1]).toFixed(1);
+                const year = row[2];
+
+                // key creation
+                const key = `${newStateFips}-${year}`;
+
+            
+                lifeData.value[key] = {
+                    STATE_FIPS: newStateFips,
+                    LIFE_EXPECTANCY: newLifeExpectancy,
+                    YEAR: year
+                };
+            
+                
+                });
+                
+                if (data['end'] === true) {
                     console.log(lifeData.value);
-                    UpdateScatter();
+                    UpdateScatter(); 
                 }
             }
         });
-        //socket.value?.emit('query', query2, 'life');
-        // for some reason the data is being recieved in 2 parts so I made an array
-        // and added the value if it was new
-        /*
-        socket.value?.on('data', (data) =>{
-            if (data['name'] == 'life') {
-                console.log('lifeData');
-                const bom = '\ufeff';//
-                data['data'].forEach(row =>{
-                    const newEntry =  {
-                        STATENAME: row[0].startsWith(bom) ? row[0].slice(1) : row[0],
-                        LIFE_EXPECTANCY: +parseFloat(row[1]).toFixed(1)
-                    };
-                    const index = lifeData.value.findIndex(item => item.STATENAME === newEntry.STATENAME);
-                    if (index !== -1) {
-                        lifeData.value[index] = newEntry;
-                    }else {
-                        lifeData.value.push(newEntry);
-                    }
-                })
-                if (data['end'] == true) {
-                    console.log(lifeData.value);
-                }
-            }
-        });
-        */
         
     })
 
@@ -427,62 +472,73 @@
 </script>
 
 <template>
-    <div>
-        <h1>Income and Life Expectancy</h1>
-    </div>
-    <div id="content">
-        <div id="controls">
-            <div id="range-slider">
-                <input type="range" v-model.number="selectedYear" :min="2000" :max="2023" />
-                <div>Selected Year: {{ selectedYear }}</div>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="" id="flexCheckChecked" v-model="showIndiviBubbles">
-                <label class="form-check-label" for="flexCheckChecked">
-                    Average Individual Income
-                </label>
-            </div>
-        </div>
-        <div id="visualization">
-            <div id="map-chart">
-                <div id="tooltip2" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">Income and Life Expectancy</h1>
+        <div class="row">
+            <div class="col-12 mb-3">
+                <div id="controls" class="p-3 border rounded">
+                    <div class="mb-3">
+                        <label for="range-slider" class="form-label">Selected Year: {{ selectedYear }}</label>
+                        <input type="range" class="form-range" id="range-slider" v-model.number="selectedYear" :min="2000" :max="2023">
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="flexCheckChecked" v-model="showIndiviBubbles">
+                        <label class="form-check-label" for="flexCheckChecked">
+                            <span class="label-individual">Average Individual Income</span>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="ftotincCheck" v-model="showFTOTINCBubbles">
+                        <label class="form-check-label" for="ftotincCheck">
+                            <span class="label-family">Average Family Income</span>
+                        </label>
+                    </div>
                 </div>
             </div>
-            <div id="line-graph">
-                <div id="tooltip" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+            <div class="col-12">
+                <div id="visualization" class="d-flex justify-content-between align-items-start">
+                    <div id="map-chart" class="border border-secondary p-2" style="width: 60%;">
+                        <div id="tooltip2" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+                        </div>
+                    </div>
+                    <div id="line-graph" class="border border-secondary p-2" style="width: 38%;">
+                        <div id="tooltip" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        
     </div>
 </template>
 
 <style scoped>
-    #content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+    #controls {
+        background: #fff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     #visualization {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
+        gap: 20px;
     }
-    #line-graph {
+    #map-chart, #line-graph {
+        position: relative; 
+        height: 400px; 
+    }
+    .label-individual {
+        background-color: #007BFF; 
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px; 
         display: inline-block;
-        width: 40%;
     }
-    #map-chart {
+
+    .label-family {
+        background-color: #DC3545; 
+        color: white;
+        padding: 5px 10px;
+        border-radius: 20px; 
         display: inline-block;
-        border: 2px solid #000;
-        width: 60%;
-    }
-    #controls {
-        padding: 10px;
-        width: 100%;
-        box-sizing: border-box;
     }
 </style>
+
 <script scoped>
 </script>
