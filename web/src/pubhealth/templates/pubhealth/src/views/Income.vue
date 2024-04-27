@@ -10,6 +10,8 @@
     import * as topojson from 'topojson-client';
     import { watch } from 'vue';
 
+    let host = `localhost`
+
     let us = ref({});
     let incomeData = ref({});
     let lifeData = ref([]);
@@ -284,7 +286,7 @@
     let socket: Ref<Socket<ServerToClient, ClientToServer> | null> = ref(null)
     onMounted(async () => {
         logger.debug('Income Component Mounted')
-        socket.value = io("ws://45.79.137.151:9001/", {transports: ['websocket', 'polling']});
+        socket.value = io(`ws://${host}:9001/`, {transports: ['websocket', 'polling']});
         let query = `SELECT
             STATEFIP,
             YEAR,

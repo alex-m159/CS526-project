@@ -22,6 +22,7 @@ interface ClientToServer {
     setup: (query: string) => string
     neighbors: (low_income_perc: number, high_income_perc: number) => any
     rural_urban_result: (level: string) => any
+    linear_regression: (pairs: [number, number][]) => any
 }
 
 interface ServerToClient {
@@ -29,6 +30,7 @@ interface ServerToClient {
     setup: (data: {data: any[]}) => any 
     neighbors_result: (data: {pnp: any[], rnr: any[], pnr: any[], rnp: any[]}) => any
     rural_urban_result: (data: {name: string, data: any[]}) => any
+    linear_regression_result: (data: {coeff_of_determination: number}) => any
 }
 
 //@ts-ignore
@@ -197,11 +199,13 @@ let zoom2 = d3.zoom()
 function clicked(event, d) {
     const [[x0, y0], [x1, y1]] = path.bounds(d);
     event.stopPropagation();
-    map_shapes.value.transition().style("fill", null);
-    d3.select(this).transition().style("fill", "yellow");
-    setTimeout(() => {
-        d3.select(this).transition().duration(1000).style("fill", null);    
-    }, 300)
+    // d3.select(map_shapes.value).transition().style("fill", null);
+    let fillcolor = d3.select(this).style('fill')
+    console.log(fillcolor)
+    d3.select(this).transition().style("fill", "yellow").transition().duration(1000).style('fill', `${fillcolor}`);
+    // setTimeout(() => {
+    //     d3.select(this).transition().duration(1000).style("fill", null);    
+    // }, 300)
     svg.value.transition().duration(750).call(
         zoom.transform,
         d3.zoomIdentity
@@ -565,21 +569,28 @@ function showPlot() {
             .attr('d', (g) => {
                 return path(g)
         })
+        .attr('data-tag', 'mapshape')
 
-    map_shapes.value.append("title")
+    map_shapes.value
+        .selectAll('path[data-tag="mapshape"]')
+        .append("title")
+        .attr('data-tag', 'mapshapetitle')
         .text(d => getTitle(d));
 
     gg.value.append("path")
       .attr("fill", "none")
-      .attr("stroke", "#aaa")
+      .attr("stroke", "#333")
       .attr("stroke-linejoin", "round")
-      .attr("d", path(pickMesh()));
+      .attr('data-tag', 'mapoutlinecounties')
+      .style('visibility', 'hidden')
+      .attr("d", path(pickMesh("counties")));
 
       gg.value.append("path")
       .attr("fill", "none")
       .attr("stroke", "#444")
       .attr("stroke-linejoin", "round")
       .attr("stroke-width", 1)
+      .attr('data-tag', 'mapoutlinestates')
       .attr("d", path(pickMesh("states")));
       
 
@@ -605,43 +616,80 @@ function showPlot() {
 function updatePlot() {
     window.county_fill = county_fill
     window.state_fill = state_fill
-    gg.value.remove()
-    map_shapes.value.remove()
+    // gg.value.remove()
+    // map_shapes.value.remove()
 
-    gg.value = svg.value.append('g')
+    // gg.value = svg.value.append('g')
 
     scaleG.value = null
 
+    let pairs: [number, number][] = pickData().map(mun => [mun.properties.avg_agi, mun.properties.health_metrics.get('All teeth lost among adults aged >=65 years')] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+
+    socket.value.emit('linear_regression', pairs)
+    
+
     map_shapes.value = gg.value
-        .append('g')
+        .selectAll('path[data-tag="mapshape"]')
         .attr('fill', "#ccc")
-        .attr('cursor', 'pointer')
-        .selectAll('path')
         .data(pickData())
         .join('path')
-            .attr('fill', (d) => getColor(d))
+            .attr('fill', '#ccc')
             .on('click', clicked)
             .attr('d', (g) => {
                 return path(g)
-        })
-   
-    map_shapes.value.append("title")
-        .text(d => getTitle(d));
-   
-    
-    
+            })
+            .attr('data-tag', "mapshape")
+            .attr('cursor', 'pointer')
+            .transition()
+            .ease(d3.easeCubicInOut)
+            .delay(300)
+            .duration(1000)
+            .style('fill', (d) => getColor(d))
 
-    gg.value.append("path")
-      .attr("fill", "none")
-      .attr("stroke", "#aaa")
-      .attr("stroke-linejoin", "round")
-      .attr("d", path(pickMesh()));
+    gg.value
+        .selectAll('path[data-tag="mapshape"]')
+        .selectAll('title')
+        .remove()
+
+    gg.value
+        .selectAll('path[data-tag="mapshape"]')
+        .append("title")
+        .text(d => {
+            return getTitle(d)
+        });
     
-    gg.value.append("path")
-      .attr("fill", "none")
-      .attr("stroke", "#444")
-      .attr("stroke-linejoin", "round")
-      .attr("d", path(pickMesh("states")));
+   
+    if(level.value === `counties`) {
+        gg.value.selectAll('path[data-tag="mapoutlinecounties"]')
+        .transition()
+        .duration(300)
+        .delay(300)
+        .style('visibility', 'visible')
+        
+        
+        gg.value.selectAll('path[data-tag="mapoutlinestates"]')
+        .transition()
+        .duration(300)
+        .style('visibility', 'hidden')
+    } else {
+        gg.value.selectAll('path[data-tag="mapoutlinecounties"]')
+        .transition()
+        .duration(300)
+        .delay(300)
+        .style('visibility', 'hidden')
+
+        gg.value.selectAll('path[data-tag="mapoutlinestates"]')
+        .transition()
+        .duration(300)
+        .style('visibility', 'visible')
+    }
+    
+    // gg.value.selectAll('path[data-tag="mapoutlinestates"]')
+    //   .attr("fill", "none")
+    //   .attr("stroke", "#444")
+    //   .attr("stroke-linejoin", "round")
+    //   .attr("d", path(pickMesh("states")));
+    
     // showScatter()
     // showSpike()
 }
@@ -1112,6 +1160,9 @@ onMounted(() => {
             state_fill.value = with_health
         }
 
+    })
+    socket.value.on('linear_regression_result', (data) => {
+        console.log(data)
     })
     fetch(`http://${domain}:${port}/counties-albers-10m.json`)
     .then((res) => {

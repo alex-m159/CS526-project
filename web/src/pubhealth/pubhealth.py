@@ -37,9 +37,9 @@ def ws_respond(query, name, emit):
         for block in stream:
             read_rows += len(block)
             if read_rows == total_rows:
-                emit('data', {'data': block, 'end': False, 'name': name})
+                emit('data', {'data': block, 'end': True, 'name': name})
             else:
-                emit('data', {'data': block, 'end': True, 'name': name })
+                emit('data', {'data': block, 'end': False, 'name': name })
 
 
 def ws_respond_setup(query, emit): 
@@ -214,12 +214,27 @@ def rural_urban(level):
         countyRUCC = df.group_by(['STATE_FIPS', 'COUNTY_FIPS']).agg( pl.col('RUCC').sum() )
         return emit('rural_urban_result', {'name': level, 'data': countyRUCC.rows()})
 
+from sklearn.linear_model import LinearRegression
+import numpy as np
+
+@socketio.on('linear_regression')
+def linear_reg(pairs):
+    pairs = [p for p in pairs if p[0] and p[1]]
+    X = np.array( [ p[0] for p in pairs] ).reshape(-1, 1)
+    y = np.array( [ p[1] for p in pairs] )
+    reg = LinearRegression().fit(X, y)
+
+
+    
+
 
 @app.route("/query", methods=['POST'])
 def provide_data():
     result = [ r for r in clickhouse.query(f"{request.data}").named_results()]
     return jsonify({'data': result})
     
+
+
 
 
 if __name__ == "__main__":

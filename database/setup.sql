@@ -54,12 +54,10 @@ CREATE TABLE rural_urban_codes (
 
 CREATE TABLE life_expectancy (
     ROWNUM                    UInt32 PRIMARY KEY,
-    STATE_NAME                String,
-    COUNTY                    Nullable(String),
-    CENSUS_TRACT_NUMBER       Nullable(Decimal(6, 2)),
-    LIFE_EXPECTANCY           Nullable(Decimal(3, 1)),
-    LIFE_EXPECTANCY_RANGE     Nullable(String),
-    LIFE_EXPECTANCY_STD_ERR   Nullable(Decimal(5, 4)),
+    STATE_FIPS                UInt32,
+    STATE_COUNTY_FIPS         Nullable(UInt32),
+    LIFE_EXPECTANCY           Decimal(3, 1),
+    YEAR                      UInt32
 ) ENGINE = MergeTree();
 
 
@@ -93,7 +91,7 @@ CREATE TABLE places_county (
     MEASURE                     String,
     DATA_VALUE_UNIT             String,
     DATA_VALUE_TYPE             String,
-    DATA_VALUE                  Decimal(3, 1),
+    DATA_VALUE                  DOUBLE,
     DATA_VALUE_FOOTNOTE_SYMBOL  Nullable(String),
     DATA_VALUE_FOOTNOTE         Nullable(String),
     LOW_CONFIDENCE_LIMIT        Decimal(3, 1),
@@ -169,6 +167,10 @@ CREATE TABLE neighboring_counties (
 ) ENGINE = MergeTree();
 
 
+CREATE TABLE pop_weighted_rucc (
+    STATE_FIPS UInt32 PRIMARY KEY,
+    WEIGHTED_RUCC DOUBLE
+) ENGINE = MergeTree();
 
 -- Clickhouse doesn't support SQL script files with multiple statements
 -- so to run this code and load in the CSV file, it's recommended to 
