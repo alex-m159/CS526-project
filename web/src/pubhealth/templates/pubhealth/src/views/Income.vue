@@ -2,13 +2,14 @@
 
     // Vue's ref is used to create a "reference" to data that may change
     // and we want to keep connected to the HTML in the template
-    import { ref, onMounted, onUnmounted } from "vue";
-    import type { Ref, computed } from "vue";
+    import { ref, onMounted, onUnmounted, computed } from "vue";
+    import type { Ref} from "vue";
     import { io, Socket } from "socket.io-client";
     import { logger } from '../utils/logging';
     import * as d3 from "d3";
     import * as topojson from 'topojson-client';
     import { watch } from 'vue';
+    import Plotly from 'plotly.js-dist';
 
     let us = ref({});
     let incomeData = ref({});
@@ -17,7 +18,8 @@
     const selectedYear = ref(2000);
     const yearRange = ref({min:2000, max:2023});
     const showIndiviBubbles = ref(true);
-    const showFTOTINCBubbles = ref(false);
+    const showFTOTINCBubbles = ref(true);
+    const plotContainer = ref(null);
 
     let stateMap = new Map();
 
@@ -26,22 +28,25 @@
     watch(showIndiviBubbles,(newValue, oldValue)=> {
         UpdateMap(us.value, incomeData.value);
         UpdateScatter();
+        Update3DScatter();
     });
     watch(showFTOTINCBubbles, (newValue, oldValue) => {
         UpdateMap(us.value, incomeData.value);
         UpdateScatter();
+        Update3DScatter();
     });
 
     watch(selectedYear, (newValue) =>{
         UpdateMap(us.value, incomeData.value);
         UpdateScatter();
     })
+
     // display the bubble map
     function ShowMap(us) {
 
         
         const width = 975;
-        const height = 500;
+        const height = 1000;
 
         const zoom = d3.zoom()
             .scaleExtent([1, 8])
@@ -100,7 +105,8 @@
             // update selected state
             selectedState.value = d.id;
             // update selected state in scatter plot
-            UpdateScatter(selectedState.value);
+            Update3DScatter();
+            UpdateScatter();
             event.stopPropagation();
             states.transition().style("fill", null);
             d3.select(this).transition().style("fill", "#333333");
@@ -132,6 +138,25 @@
         }
 
         let filteredIncomeData = incomeData.value.filter(dataEntry => dataEntry.YEAR === selectedYearData);
+        let combinedData = filteredIncomeData.map(dataEntry => {
+            const key = `${dataEntry.STATEFIP}-${selectedYearData}`;
+            const lifeEntry = lifeData.value[key];
+            return {
+                ...dataEntry,
+                LIFE_EXPECTANCY: lifeEntry ? lifeEntry.LIFE_EXPECTANCY : null,
+            };
+        });
+        //console.log("combinedData:", combinedData);
+        return combinedData;
+    }
+    function combineStateData3D() {
+        let selectedYearData = selectedYear.value;
+        
+        if (!Object.values(lifeData.value).some(d => d.YEAR === selectedYearData)) {
+            selectedYearData = 2019; 
+        }
+
+        let filteredIncomeData = incomeData.value;
         let combinedData = filteredIncomeData.map(dataEntry => {
             const key = `${dataEntry.STATEFIP}-${selectedYearData}`;
             const lifeEntry = lifeData.value[key];
@@ -259,6 +284,82 @@
     // hide tooltip function
     function tooltipHideFunction() {
         d3.select("#tooltip").style("opacity", 0);
+    }
+    // 3d scatter plot
+    function Update3DScatter() {
+        const data1 = combineStateData3D();
+        const plotData = computed(() => {
+            return data1
+                .filter(d => d.YEAR >= 2000 && d.YEAR <= 2019)
+                .map(d => {
+                    return {
+                        x: d.avg_INCTOT,
+                        y: d.avg_FTOTVAL,
+                        z: d.LIFE_EXPECTANCY,
+                        id: d.STATEFIP,
+                        year: d.YEAR,
+                        name: d.STATENAME,
+                        text: `State: ${d.STATENAME}<br>Year: ${d.YEAR}<br>Income: $${d.avg_INCTOT} (Individual), <br>Life Expectancy: ${d.LIFE_EXPECTANCY} years`,
+                        text2: `State: ${d.STATENAME}<br>Year: ${d.YEAR}<br>Income: $${d.avg_FTOTVAL} (Family)<br>Life Expectancy: ${d.LIFE_EXPECTANCY} years`,
+                    };
+                })
+                .filter(d => (showIndiviBubbles.value && d.x != null) || (showFTOTINCBubbles.value && d.y != null));
+        });
+        const data = plotData.value;
+        //console.log("Data for plotting:", JSON.stringify(data, null, 2));
+        // selected state colors
+        let individualIncomeColors = data.map(d => (d.id === selectedState.value ? 'blue' : '#c3e0ea'));
+        let familyIncomeColors = data.map(d => (d.id === selectedState.value ? 'red' : '#ffc9bb'));
+        const traces = [];
+        if (showIndiviBubbles.value) {
+            traces.push({
+                x: data.map(d => d.x),
+                y: data.map(d => d.year), 
+                z: data.map(d => d.z),
+                mode: 'markers',
+                type: 'scatter3d',
+                name: 'Individual Income',
+                marker: {
+                    color: individualIncomeColors,
+                    size: 6,
+                    opacity: 0.8,
+                    
+                },
+                text: data.map(d => d.text),
+                hoverinfo: 'text'
+            });
+        }
+
+        if (showFTOTINCBubbles.value) {
+            traces.push({
+                x: data.map(d => d.y),
+                y: data.map(d => d.year), 
+                z: data.map(d => d.z),
+                mode: 'markers',
+                type: 'scatter3d',
+                name: 'Family Income',
+                marker: {
+                    color: familyIncomeColors,
+                    size: 6,
+                    opacity: 0.8,
+                    
+                },
+                text: data.map(d => d.text2),
+                hoverinfo: 'text'
+            });
+        }
+
+        const layout = {
+            margin: { l: 0, r: 0, b: 0, t: 0 },
+            scene: {
+                xaxis: { title: 'Income' },
+                yaxis: { title: 'Year' },
+                zaxis: { title: 'Life Expectancy' }
+            },
+            showlegend: false
+        };
+        
+        Plotly.newPlot(plotContainer.value, traces, layout);
     }
 
     // update function for the bubble map
@@ -465,10 +566,13 @@
                 
                 if (data['end'] === true) {
                     //console.log(lifeData.value);
-                    UpdateScatter(); 
+                    plotContainer.value = document.getElementById('3d-graph');  // Ensure this ID matches your HTML
+                    UpdateScatter();
+                    Update3DScatter();
                 }
             }
         });
+        
         
     })
 
@@ -511,10 +615,16 @@
                         <div id="tooltip2" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
                         </div>
                     </div>
-                    <div id="line-graph" class="border border-secondary p-2" style="width: 38%;">
-                        <div id="tooltip" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+                    <div style="width: 38%; display: flex; flex-direction: column;">
+                        <div id="line-graph" class="border border-secondary" style="height: 400px;">
+                            <div id="tooltip" style="position: absolute; text-align: left; width: auto; height: auto; padding: 10px; background: #f9f9f9; border: 1px solid #d4d4d4; border-radius: 8px; pointer-events: none; opacity: 0;">
+                            </div>
+                        </div>
+                        <div id="3d-graph" class="border border-secondary" style="height: 400px;">
+
                         </div>
                     </div>
+                
                 </div>
             </div>
         </div>
@@ -527,11 +637,23 @@
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     #visualization {
+        display: flex;
+        flex-wrap: wrap;
         gap: 20px;
     }
-    #map-chart, #line-graph {
+    #map-chart {
         position: relative; 
+        height: 800px; 
+    }
+    #line-graph {
+        position: relative;
+        height: 400px;
+    }
+    #3d-graph {
+        position: relative;
         height: 400px; 
+        background-color: #f0f0f0; 
+        border: 1px solid black; 
     }
     .label-individual {
         background-color: #007BFF; 
@@ -550,5 +672,3 @@
     }
 </style>
 
-<script scoped>
-</script>
