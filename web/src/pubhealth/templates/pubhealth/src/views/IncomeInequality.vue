@@ -542,9 +542,12 @@ function getTitle(d) {
 
 
 
-
+let plotted = ref(false)
 function showPlot() {
-
+    if(plotted.value == true) {
+        return
+    }
+    console.log("SHOW PLOT")
     window.d3 = d3
     scaleG.value = null
 
@@ -598,6 +601,7 @@ function showPlot() {
     if(document.getElementById('plot')?.childNodes.length == 0) {
         document.getElementById('plot')?.appendChild(svg.value.node())
         window.gg = gg
+        plotted.value = true
         // let leg_svg = d3.create('svg').append(legend()).attr("transform", "translate(870,450)");
         
         // @ts-ignore
@@ -608,24 +612,54 @@ function showPlot() {
     
 }
 
+let display_stats = ref(false)
+let stats_title = ref("")
+let stats_covar = ref("")
+let stats_corr = ref("")
+function showStats(data: any) {
+
+    let covar = data['covariance']
+    let corr = data['correlation_coef']
+
+    stats_title.value = `${income_metric.value} vs ${health_metric.value}`
+    stats_covar.value = `Covariance: ${covar}`
+    stats_corr.value = `Correlation Coefficient: ${(100*corr).toFixed(3)}`
+
+    display_stats.value = true
+
+}
+
+function hideStats() {
+    display_stats.value = false
+}
+
 /**
  * TODO: Must find a way to update the plot "in-place" rather than delete it 
  * to improve interactivity. When colors or scales are changed we don't want 
  * the plot to be unzoomed and recentered
  */
-function updatePlot() {
+function updatePlot(clear?: boolean) {
+    console.log("UPDATE PLOT")
     window.county_fill = county_fill
     window.state_fill = state_fill
-    // gg.value.remove()
-    // map_shapes.value.remove()
-
-    // gg.value = svg.value.append('g')
 
     scaleG.value = null
 
-    let pairs: [number, number][] = pickData().map(mun => [mun.properties.avg_agi, mun.properties.health_metrics.get('All teeth lost among adults aged >=65 years')] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+    
 
-    socket.value.emit('linear_regression', pairs)
+    if(income_metric.value !== 'none' && income_metric.value !== 'none') {
+        if(income_metric.value == 'agi') {
+            let pairs: [number, number][] = pickData().map(mun => [mun.properties.avg_agi, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+            socket.value.emit('linear_regression', pairs)
+        } 
+        if(income_metric.value == 'gini') {
+            let pairs: [number, number][] = pickData().map(mun => [mun.properties.gini, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+            socket.value.emit('linear_regression', pairs)
+        }
+        
+        
+    }
+    
     
 
     map_shapes.value = gg.value
@@ -828,7 +862,6 @@ function ruralUrbanCodes() {
             county_fill.value = with_rucc
             showClustering()
             
-            updatePlot()
         }
     })
 
@@ -1162,7 +1195,7 @@ onMounted(() => {
 
     })
     socket.value.on('linear_regression_result', (data) => {
-        console.log(data)
+        showStats(data['data'])
     })
     fetch(`http://${domain}:${port}/counties-albers-10m.json`)
     .then((res) => {
@@ -1188,7 +1221,8 @@ onMounted(() => {
         })
         state_fill.value    = topojson.feature(geojson.value, geojson.value.objects.states).features
         window.state_fill = state_fill
-
+        
+        socket.value.emit('query', query_state, "state")    
         socket.value.emit('query', query, "county")
         socket.value.emit('query', county_agi, "county_agi")
         socket.value.emit('query', state_agi, "state_agi")
@@ -1196,13 +1230,6 @@ onMounted(() => {
         socket.value.emit('query', health_state_query, 'health_state')
     })
     
-    
-
-    document.querySelector("#stateScaleToggle").bootstrapToggle({
-        off: 'National',
-        on: 'State'
-    });
-
     
 
 })
@@ -1229,6 +1256,10 @@ function colorAllMouseUp() {
     console.log('colorAllMouseUp')
     color_all_with_clusters.value = false
     updatePlot()
+}
+
+function updatePlotLevel() {
+    updatePlot(true)
 }
 </script>
 <template>
@@ -1285,18 +1316,6 @@ function colorAllMouseUp() {
                                 </option>
                             </select>
                         </div>
-                        <div class="row my-3">
-                            <p>Color Coding Scale Domain (non-functional):</p>
-                            <input 
-                                id="stateScaleToggle" 
-                                type="checkbox" 
-                                v-model="state_scale"
-                                @change="updatePlot"
-                                data-toggle="toggle"  
-                                data-onstyle="outline-dark" 
-                                data-offstyle="outline-success" ></input>
-                        </div>
-                        
                         
                         <div class="row">
                             <p>Health Metric:</p>
@@ -1304,6 +1323,7 @@ function colorAllMouseUp() {
                                 <option v-for="metric in Array.from(health_metric_options.values())" :value="metric">{{ metric }}</option>
                             </select>
                         </div>
+                        <!--
                         <div class="row">
                             <p>Population Density Metric:</p>
                             <select class="form-select" v-model="pop_metric" @click="updatePlot">
@@ -1316,6 +1336,7 @@ function colorAllMouseUp() {
                         <div class="row my-3">
                             <button class="btn btn-outline-danger" @click="reset()">Reset</button>
                         </div>
+                        -->
                     </div>
                     </div>
                 </div>
@@ -1501,7 +1522,17 @@ function colorAllMouseUp() {
                     </h2>
                     <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="health-metrics" >
                     <div class="accordion-body">
-                        <div id="scatter"></div>
+                        <div v-if="display_stats">
+                            <div id="stats-title">
+                                {{ stats_title }}
+                            </div>
+                            <div id="covariance">
+                                {{ stats_covar }}
+                            </div>
+                            <div id="correlation_coef">
+                                {{ stats_corr }}
+                            </div>
+                        </div>
                     </div>
                     </div>
                 </div>

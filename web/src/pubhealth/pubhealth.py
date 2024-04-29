@@ -37,9 +37,9 @@ def ws_respond(query, name, emit):
         for block in stream:
             read_rows += len(block)
             if read_rows == total_rows:
-                emit('data', {'data': block, 'end': True, 'name': name})
+                emit('data', {'data': block, 'end': False, 'name': name})
             else:
-                emit('data', {'data': block, 'end': False, 'name': name })
+                emit('data', {'data': block, 'end': True, 'name': name })
 
 
 def ws_respond_setup(query, emit): 
@@ -215,14 +215,23 @@ def rural_urban(level):
         return emit('rural_urban_result', {'name': level, 'data': countyRUCC.rows()})
 
 from sklearn.linear_model import LinearRegression
+from sklearn.covariance import EmpiricalCovariance
 import numpy as np
 
 @socketio.on('linear_regression')
 def linear_reg(pairs):
-    pairs = [p for p in pairs if p[0] and p[1]]
-    X = np.array( [ p[0] for p in pairs] ).reshape(-1, 1)
-    y = np.array( [ p[1] for p in pairs] )
-    reg = LinearRegression().fit(X, y)
+    try: 
+
+        pairs = [p for p in pairs if p[0] and p[1]]
+        X = np.array( [ p[0] for p in pairs] ).reshape(-1, 1)
+        y = np.array( [ p[1] for p in pairs] )
+        reg = LinearRegression().fit(X, y)
+
+        cov = EmpiricalCovariance().fit(X, y)
+
+        emit('linear_regression_result', {'data': {'correlation_coef': reg.score(X, y), 'covariance': cov.covariance_[0, 0]}, 'error': False})
+    except Exception:
+        emit('linear_regression_result', {'data': {'correlation_coef': 0.0, 'covariance': 0.0}, 'error': True})
 
 
     
