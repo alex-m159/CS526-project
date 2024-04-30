@@ -1,5 +1,8 @@
 # [CS 526] Data Visualization Project
-Group 3: Amari Urquhart, Jennifer Xin, Alex Markley
+Group 3: 
+
+Amari Urquhart, Jennifer Xin, Alex Markley
+
 This project is focused on creating interactive visualizations using public health and income datasets.
 
 
