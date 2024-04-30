@@ -12,7 +12,7 @@
     import Plotly from 'plotly.js-dist';
 
     let domain = `localhost`
-    let port = 9001
+    let port = 9002
 
     let us = ref({});
     let incomeData = ref({});

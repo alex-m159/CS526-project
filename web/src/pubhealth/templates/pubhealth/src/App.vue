@@ -11,6 +11,9 @@ import HelloWorld from './components/HelloWorld.vue'
       <a class="d-flex align-items-center text-center col-md-3 mb-2 mb-md-0 text-dark text-decoration-none">US Public Health</a>
       <span class="d-flex align-items-center col-md-4">
         <nav class="nav nav-pills">
+        <li class="nav-item mx-3">
+            <RouterLink to="/">Home</RouterLink>
+          </li>
           <li class="nav-item mx-3">
             <RouterLink to="/income">Income</RouterLink>
           </li>
