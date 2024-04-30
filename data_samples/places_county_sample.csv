@@ -1,0 +1,10 @@
+0,2021,"GA","Georgia","Ware","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",4.6,"","",4,5.1,36033,13299,"HLTHOUT","STROKE","CrdPrv","Stroke",-82.4215072,31.050881
+1,2021,"IN","Indiana","Ohio","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",3.8,"","",3.3,4.4,5978,18115,"HLTHOUT","STROKE","CrdPrv","Stroke",-84.9642994,38.940527
+2,2021,"IN","Indiana","Owen","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",4,"","",3.5,4.6,21446,18119,"HLTHOUT","STROKE","CrdPrv","Stroke",-86.8388453,39.3173394
+3,2021,"IA","Iowa","Iowa","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",3.3,"","",2.8,3.8,16568,19095,"HLTHOUT","STROKE","CrdPrv","Stroke",-92.0591226,41.6839184
+4,2021,"IA","Iowa","Marion","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",3,"","",2.5,3.5,33380,19125,"HLTHOUT","STROKE","CrdPrv","Stroke",-93.0938678,41.3314327
+5,2021,"TX","Texas","Deaf Smith","BRFSS","Health Outcomes","Obesity among adults aged >=18 years","%","Crude prevalence",42,"","",33.6,51,18329,48117,"HLTHOUT","OBESITY","CrdPrv","Obesity",-102.6075637,34.9407663
+6,2021,"TX","Texas","Goliad","BRFSS","Health Outcomes","Chronic obstructive pulmonary disease among adults aged >=18 years","%","Crude prevalence",8.5,"","",7.1,10.1,7163,48175,"HLTHOUT","COPD","CrdPrv","COPD",-97.4304145,28.6607
+7,2021,"AL","Alabama","Dallas","BRFSS","Health Outcomes","Obesity among adults aged >=18 years","%","Crude prevalence",44.3,"","",36.8,52.2,37619,1047,"HLTHOUT","OBESITY","CrdPrv","Obesity",-87.11436,32.3335263
+8,2021,"AK","Alaska","Petersburg","BRFSS","Health Outcomes","Obesity among adults aged >=18 years","%","Crude prevalence",31,"","",24.4,38.2,3356,2195,"HLTHOUT","OBESITY","CrdPrv","Obesity",-133.0085979,57.1124581
+9,2021,"AK","Alaska","Wrangell","BRFSS","Health Outcomes","Stroke among adults aged >=18 years","%","Crude prevalence",4.4,"","",3.9,5,2055,2275,"HLTHOUT","STROKE","CrdPrv","Stroke",-132.0267878,56.1807793

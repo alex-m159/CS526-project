@@ -6,6 +6,9 @@ import { io, Socket } from "socket.io-client";
 //@ts-ignore
 import * as d3 from "d3";
 
+let host = `localhost`
+let port = `9002`
+
 interface ClientToServer {
     query: (query: string) => string
     setup: (query: string) => string
@@ -216,9 +219,9 @@ function showPlot() {
       .call(g => g.selectAll(".tick line").attr("stroke", "#ddd"));
     
     const svg = d3.create('svg')
-        .attr('viewBox', [-50,-50,1200,1200])
-        .style('height', height)
-        .style('width', width)
+        .attr('viewBox', [-50,-50,1000,1000])
+        .style('height', 1200)
+        .style('width', 1200)
 
     
     svg.append("style")
@@ -480,12 +483,13 @@ const DATA_VALUE = 5
 const REGION = 6
 const DIVISION = 7
 
+
+
 onMounted(() => {
     logger.debug("Taxation Component Mounted")
     
-    socket.value = io(`ws://localhost:9001/`, {transports: ['websocket', 'polling']});
+    socket.value = io(`ws://${host}:${port}/`, {transports: ['websocket', 'polling']});
     let query = `
-
     SELECT avg_agi, avg_tax, state_name, county_name, measure, avg_data_value, REGION, DIVISION 
     FROM (
             SELECT (sum(ADJUSTED_GROSS_INCOME) / sum(NUM_RETURNS)) as avg_agi, (sum(TAXES_PAID_AMOUNT) / sum(NUM_RETURNS)) as avg_tax, any(STATE_NAME) as state_name, any(COUNTY_NAME) as county_name, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
@@ -501,17 +505,8 @@ onMounted(() => {
     `
     
 
-    
-
-    /**
-     * [] Can D3 make use of Map/hashmap data structures?
-     * [] Can we display and incrementally update data as it arrives from the web socket?
-     * [] Can the Python server be adjusted to send data more frequently rather than allowing it to build up
-     * 
-     */
     showPlot()
     socket.value?.on('data', (data) => {
-        // logger.debug(`Data received: ${getFlatData().length}`)
         data['data'].forEach((row) => {
             let state: string = row[STATE_NAME]
             let county: string = row[COUNTY_NAME]
@@ -561,7 +556,7 @@ onMounted(() => {
         
     })
     
-    socket.value?.emit('query', query)
+    socket.value?.emit('query', query, "query")
 
     let setup_query = `SELECT DISTINCT STATE_NAME, STATE_ABBREV, STATE_FIPS, REGION, DIVISION FROM cps_00004.state_regions`
     
@@ -919,4 +914,4 @@ function clearStates() {
             
         </div>
     </div>
-</template>
+</template> 

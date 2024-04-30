@@ -11,6 +11,9 @@
     import { watch } from 'vue';
     import Plotly from 'plotly.js-dist';
 
+    let domain = `localhost`
+    let port = 9002
+
     let us = ref({});
     let incomeData = ref({});
     let lifeData = ref([]);
@@ -146,7 +149,14 @@
                 LIFE_EXPECTANCY: lifeEntry ? lifeEntry.LIFE_EXPECTANCY : null,
             };
         });
-        //console.log("combinedData:", combinedData);
+        // console.log("combinedData:", combinedData);
+        socket.value?.emit('linear_regression', combinedData.map((datum) => {
+            return [datum['avg_INCTOT'], datum['LIFE_EXPECTANCY']]
+        }), 'Individual Income vs Life Expectancy')
+
+        socket.value?.emit('linear_regression', combinedData.map((datum) => {
+            return [datum['avg_FTOTVAL'], datum['LIFE_EXPECTANCY']]
+        }), 'Family Income vs Life Expectancy')
         return combinedData;
     }
     function combineStateData3D() {
@@ -165,7 +175,7 @@
                 LIFE_EXPECTANCY: lifeEntry ? lifeEntry.LIFE_EXPECTANCY : null,
             };
         });
-        //console.log("combinedData:", combinedData);
+        // console.log("combinedData:", combinedData);
         return combinedData;
     }
 
@@ -447,6 +457,24 @@
 
     }
 
+    let display_stats = ref(true)
+
+    let display_vars: Ref<Map<string, [string, string]>> = ref(new Map())
+
+    
+    function showStats(data, name) {
+        let covar = data['covariance']
+        let corr_coef = data['correlation_coef']
+
+
+        let title = name
+        let cov = `Covariance: ${String(covar.toFixed(3))}`
+        let corr = `Correlation Coefficient: ${String((100*corr_coef).toFixed(3))}`
+
+        display_vars.value.set(title, [cov, corr])
+
+        display_stats.value = true
+    }
 
 
     interface ClientToServer {
@@ -461,7 +489,7 @@
     let socket: Ref<Socket<ServerToClient, ClientToServer> | null> = ref(null)
     onMounted(async () => {
         logger.debug('Income Component Mounted')
-        socket.value = io("ws://localhost:8000/", {transports: ['websocket', 'polling']});
+        socket.value = io(`ws://${domain}:${port}/`, {transports: ['websocket', 'polling']});
         let query = `SELECT
             STATEFIP,
             YEAR,
@@ -572,6 +600,10 @@
                 }
             }
         });
+
+        socket.value.on('linear_regression_result', (data) => {
+            showStats(data['data'], data['name'])
+        })
         
         
     })
@@ -606,6 +638,19 @@
                         <label class="form-check-label" for="ftotincCheck">
                             <span class="label-family">Average Family Income</span>
                         </label>
+                    </div>
+                    <div class="row">
+                        <div class='col' v-for="elem in Array.from(display_vars.entries())">
+                            <div class="fw-bold">
+                                {{ elem[0] }}
+                            </div>
+                            <div>
+                                {{  elem[1][0] }}
+                            </div>
+                            <div>
+                                {{  elem[1][1] }}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

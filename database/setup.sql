@@ -54,12 +54,10 @@ CREATE TABLE rural_urban_codes (
 
 CREATE TABLE life_expectancy (
     ROWNUM                    UInt32 PRIMARY KEY,
-    STATE_NAME                String,
-    COUNTY                    Nullable(String),
-    CENSUS_TRACT_NUMBER       Nullable(Decimal(6, 2)),
-    LIFE_EXPECTANCY           Nullable(Decimal(3, 1)),
-    LIFE_EXPECTANCY_RANGE     Nullable(String),
-    LIFE_EXPECTANCY_STD_ERR   Nullable(Decimal(5, 4)),
+    STATE_FIPS                UInt32,
+    STATE_COUNTY_FIPS         Nullable(UInt32),
+    LIFE_EXPECTANCY           Decimal(3, 1),
+    YEAR                      UInt32
 ) ENGINE = MergeTree();
 
 
@@ -93,7 +91,7 @@ CREATE TABLE places_county (
     MEASURE                     String,
     DATA_VALUE_UNIT             String,
     DATA_VALUE_TYPE             String,
-    DATA_VALUE                  Decimal(3, 1),
+    DATA_VALUE                  DOUBLE,
     DATA_VALUE_FOOTNOTE_SYMBOL  Nullable(String),
     DATA_VALUE_FOOTNOTE         Nullable(String),
     LOW_CONFIDENCE_LIMIT        Decimal(3, 1),
@@ -107,29 +105,7 @@ CREATE TABLE places_county (
     GEOLOCATION                 Point
 ) ENGINE = MergeTree();
 
-CREATE TABLE premature_deaths (
-    ROWNUM                      UInt32 PRIMARY KEY,
-    STATE_FIPS                  UInt32,
-    STATE_NAME                  String,
-    YEAR_COLLECTED              UInt16,
-    YEARS_LOST_PER_100K         UInt32,
-)
 
-CREATE TABLE public_health_spending (
-    ROWNUM                      UInt32 PRIMARY KEY,
-    STATE_FIPS                  UInt32,
-    STATE_NAME                  String,
-    YEAR_COLLECTED              UInt16,
-    DOLLARS_PER_CAPITA          UInt32,
-)
-
-CREATE TABLE preventable_hospitalizations (
-    ROWNUM                      UInt32 PRIMARY KEY,
-    STATE_FIPS                  UInt32,
-    STATE_NAME                  String,
-    YEAR_COLLECTED              UInt16,
-    HOSPITALIZATIONS_PER_100K   UInt32,
-)
 
 CREATE TABLE state_regions (
     STATE_FIPS UInt32 PRIMARY KEY,
@@ -169,22 +145,10 @@ CREATE TABLE neighboring_counties (
 ) ENGINE = MergeTree();
 
 
-
--- Clickhouse doesn't support SQL script files with multiple statements
--- so to run this code and load in the CSV file, it's recommended to 
--- run:
---  $ clickhouse client --query="<copy below SQL statement>" < cps_00004_merged.csv
---
--- You'll also have to ensure that you have proper permissions in Clickhouse for
--- the above command to work.
-INSERT INTO cps_00004.cps_00004 (ROWNUM, YEAR, SERIAL, MONTH, MONTH_NAME, CPSID, ASECFLAG, HFLAG, ASECWTH, STATEFIP, STATEFIP_NAME, STATECENSUS, COUNTY, METFIPS, METAREA, METAREA_NAME, METRO, METRO_NAME, INDIVIDCC, PERNUM, CPSIDV, CPSIDP, ASECWT, EDUC, EDUC_NAME, HIGRADE, HIGRADE_NAME, FTOTVAL, INCTOT, ADJGINC, FEDTAX, FEDTAXAC, MARGTAX, STATETAX, STATAXAC, TAXINC ) FORMAT CSV 
-
-INSERT INTO cps_00004.rural_urban_codes (FIPS, STATE_ABBREV, COUNTY_NAME, POP, RUCC, DESCR) FORMAT CSV
-
-INSERT INTO cps_00004.life_expectancy ( ROWNUM, STATE_NAME, COUNTY, CENSUS_TRACT_NUMBER, LIFE_EXPECTANCY, LIFE_EXPECTANCY_RANGE, LIFE_EXPECTANCY_STD_ERR ) FORMAT CSV 
-
-INSERT INTO cps_00004.state_regions (STATE_FIPS, STATE_NAME, STATE_ABBREV, DIVISION, REGION ) FORMAT CSV 
-
+CREATE TABLE pop_weighted_rucc (
+    STATE_FIPS UInt32 PRIMARY KEY,
+    WEIGHTED_RUCC DOUBLE
+) ENGINE = MergeTree();
 
 
 
