@@ -23,6 +23,9 @@ https://catalog.data.gov/dataset/rural-urban-continuum-codes
 Income Tax:
 https://www.irs.gov/statistics/soi-tax-stats-county-data
 
+## Data Samples
+The `data_samples` folder contains a small sample of our datasets. Ten rows from each. The files are named after the corresponding table name, please refer to the `database/schema.sql` file for the original schema they were taken from.
+
 ## Installation
 
 ### Clickhouse Database
