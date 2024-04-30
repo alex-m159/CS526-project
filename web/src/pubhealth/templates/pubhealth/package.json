@@ -19,6 +19,8 @@
     "d3-ternary": "^2.0.14",
     "loglevel": "^1.9.1",
     "pinia": "^2.1.7",
+    "plotly.js": "^1.47.4",
+    "plotly.js-dist": "^2.32.0",
     "socket.io-client": "^4.7.4",
     "topojson": "^3.0.2",
     "vue": "^3.4.15",

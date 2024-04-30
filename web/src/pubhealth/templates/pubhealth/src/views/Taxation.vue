@@ -7,6 +7,7 @@ import { io, Socket } from "socket.io-client";
 import * as d3 from "d3";
 
 let host = `localhost`
+let port = `9002`
 
 interface ClientToServer {
     query: (query: string) => string
@@ -487,7 +488,7 @@ const DIVISION = 7
 onMounted(() => {
     logger.debug("Taxation Component Mounted")
     
-    socket.value = io(`ws://${host}:9001/`, {transports: ['websocket', 'polling']});
+    socket.value = io(`ws://${host}:${port}/`, {transports: ['websocket', 'polling']});
     let query = `
     SELECT avg_agi, avg_tax, state_name, county_name, measure, avg_data_value, REGION, DIVISION 
     FROM (
@@ -913,4 +914,4 @@ function clearStates() {
             
         </div>
     </div>
-</template>
+</template> 

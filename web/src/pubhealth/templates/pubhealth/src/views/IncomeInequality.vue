@@ -7,12 +7,12 @@ import { logger } from '../utils/logging';
 import { io, Socket } from "socket.io-client";
 //@ts-ignore
 import * as d3 from "d3";
-
+import Plotly from 'plotly.js-dist';
 import * as topojson from "topojson"
 // import * as turf from "@turf/turf"
 
 let domain = `localhost`
-let port = 9001
+let port = 9002
 import { bivaraite_side_length, bivariate_colors, legend } from "@/utils/bivariate";
 
 
@@ -28,7 +28,7 @@ interface ClientToServer {
 interface ServerToClient {
     data: (data: {data: any[], end: boolean, name: string}) => any
     setup: (data: {data: any[]}) => any 
-    neighbors_result: (data: {pnp: any[], rnr: any[], pnr: any[], rnp: any[]}) => any
+    neighbors_result: (data: {pnp: any[], rnr: any[], pnr: any[], rnp: any[], poor: number, rich: number}) => any
     rural_urban_result: (data: {name: string, data: any[]}) => any
     linear_regression_result: (data: {coeff_of_determination: number}) => any
 }
@@ -202,7 +202,7 @@ function clicked(event, d) {
     // d3.select(map_shapes.value).transition().style("fill", null);
     let fillcolor = d3.select(this).style('fill')
     console.log(fillcolor)
-    d3.select(this).transition().style("fill", "yellow").transition().duration(1000).style('fill', `${fillcolor}`);
+    d3.select(this).transition().style("fill", "yellow").transition().duration(500).style('fill', `${fillcolor}`);
     // setTimeout(() => {
     //     d3.select(this).transition().duration(1000).style("fill", null);    
     // }, 300)
@@ -501,6 +501,8 @@ function getColor(d) {
                 }
                 return rnpScale(getIncomeMetric(d))
             }
+        
+
         } else {
             // apply bivariate coloring
             if(d.properties.group.has(cluster.value) || color_all_with_clusters.value) {
@@ -625,8 +627,60 @@ function showStats(data: any) {
     stats_covar.value = `Covariance: ${covar}`
     stats_corr.value = `Correlation Coefficient: ${(100*corr).toFixed(3)}`
 
+
+
     display_stats.value = true
 
+    let pnp_total:  number[] = pickData("counties").filter(c => c.properties.group.has('pnp')).map(v => getHealthMetric(v))
+
+    let pnr_total:  number[] = pickData("counties").filter(c => c.properties.group.has('pnr')).map(v => getHealthMetric(v))
+    let pnr_poor:   number[] = pickData("counties").filter(c => c.properties.group.has('pnr') && c.properties.avg_agi <= poor_thresh.value).map(v => getHealthMetric(v))
+    let pnr_rich:   number[] = pickData("counties").filter(c => c.properties.group.has('pnr') && c.properties.avg_agi >= rich_thresh.value).map(v => getHealthMetric(v))
+
+    let rnp_total:  number[] = pickData("counties").filter(c => c.properties.group.has('rnp')).map(v => getHealthMetric(v))
+    let rnp_poor:   number[] = pickData("counties").filter(c => c.properties.group.has('rnp') && c.properties.avg_agi <= poor_thresh.value).map(v => getHealthMetric(v))
+    let rnp_rich:   number[] = pickData("counties").filter(c => c.properties.group.has('rnp') && c.properties.avg_agi >= poor_thresh.value).map(v => getHealthMetric(v))
+
+    let rnr_total:  number[] = pickData("counties").filter(c => c.properties.group.has('rnr')).map(v => getHealthMetric(v))
+
+    
+    var p = {
+        y: pnp_total.concat(pnr_poor).concat(rnp_poor),
+        x: pnp_total.map(() => 'Poor-near-Poor').concat(pnr_poor.map(() => 'Poor-near-Rich')).concat(rnp_poor.map(() => 'Rich-near-Poor')),
+        name: 'poor',
+        marker: {color: 'blue'},
+        type: 'box'
+    };
+
+    
+    var r = {
+        y: pnr_rich.concat(rnp_rich).concat(rnr_total),
+        x: pnr_rich.map(() => 'Poor-near-Rich').concat(rnp_total.map(() => 'Rich-near-Poor')).concat(rnr_total.map(() => 'Rich-near-Rich')), 
+        name: 'rich',
+        marker: {color: 'red'},
+        type: 'box'
+    };
+
+    var b = {
+        y: pnr_total.concat(rnp_total),
+        x: pnr_total.map(() => 'Poor-near-Rich').concat(rnp_total.map(() => 'Rich-near-Poor')) ,
+        name: 'both',
+        marker: {color: 'purple'},
+        type: 'box'
+    };
+
+
+    var data = [p, r, b];
+
+    var layout = {
+        yaxis: {
+            title: 'Health Metric',
+            zeroline: false
+        },
+        boxmode: 'group'
+    };
+
+    Plotly.newPlot('box_plot', data, layout);
 }
 
 function hideStats() {
@@ -645,22 +699,8 @@ function updatePlot(clear?: boolean) {
 
     scaleG.value = null
 
-    
-
-    if(income_metric.value !== 'none' && income_metric.value !== 'none') {
-        if(income_metric.value == 'agi') {
-            let pairs: [number, number][] = pickData().map(mun => [mun.properties.avg_agi, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
-            socket.value.emit('linear_regression', pairs)
-        } 
-        if(income_metric.value == 'gini') {
-            let pairs: [number, number][] = pickData().map(mun => [mun.properties.gini, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
-            socket.value.emit('linear_regression', pairs)
-        }
-        
-        
-    }
-    
-    
+    hideStats()
+    requestLinearRegression()
 
     map_shapes.value = gg.value
         .selectAll('path[data-tag="mapshape"]')
@@ -676,8 +716,8 @@ function updatePlot(clear?: boolean) {
             .attr('cursor', 'pointer')
             .transition()
             .ease(d3.easeCubicInOut)
-            .delay(300)
-            .duration(1000)
+            .delay(100)
+            .duration(500)
             .style('fill', (d) => getColor(d))
 
     gg.value
@@ -696,7 +736,7 @@ function updatePlot(clear?: boolean) {
     if(level.value === `counties`) {
         gg.value.selectAll('path[data-tag="mapoutlinecounties"]')
         .transition()
-        .duration(300)
+        .duration(100)
         .delay(300)
         .style('visibility', 'visible')
         
@@ -709,7 +749,7 @@ function updatePlot(clear?: boolean) {
         gg.value.selectAll('path[data-tag="mapoutlinecounties"]')
         .transition()
         .duration(300)
-        .delay(300)
+        .delay(100)
         .style('visibility', 'hidden')
 
         gg.value.selectAll('path[data-tag="mapoutlinestates"]')
@@ -718,15 +758,11 @@ function updatePlot(clear?: boolean) {
         .style('visibility', 'visible')
     }
     
-    // gg.value.selectAll('path[data-tag="mapoutlinestates"]')
-    //   .attr("fill", "none")
-    //   .attr("stroke", "#444")
-    //   .attr("stroke-linejoin", "round")
-    //   .attr("d", path(pickMesh("states")));
-    
-    // showScatter()
-    // showSpike()
+
 }
+
+let poor_thresh = ref(0)
+let rich_thresh = ref(0)
 
 let loaded_comparisons = ref(false)
 function countyComparisons() {
@@ -738,7 +774,9 @@ function countyComparisons() {
     let AVG_AGI_right = 5
     
     socket.value.on('neighbors_result', (data) => {
-        let {pnp, rnr, pnr, rnp} = data
+        let {pnp, rnr, pnr, rnp, rich, poor} = data
+        poor_thresh.value = poor
+        rich_thresh.value = rich
         let pnp_map: Map<number, [boolean, any[]]> = new Map(pnp.map((c) => [c[STATE_COUNTY_FIPS_right], [false, c]]))
         pnp.forEach((c) => {
             let k = c[STATE_COUNTY_FIPS_left]
@@ -986,6 +1024,43 @@ function showClustering() {
 
 
 }
+let health_county_query = (measure: string) => {return `
+    SELECT COUNTY_FIPS, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
+    FROM cps_00004.places_county 
+    WHERE MEASURE LIKE '%${measure}%'
+    GROUP BY COUNTY_FIPS, MEASURE
+    `}
+
+let health_state_query = (measure: string) => {return `
+    SELECT STATE_FIPS, MEASURE, avg_data_value
+    FROM (
+            SELECT any(STATE_NAME) as STATE_NAME, MEASURE, avg(DATA_VALUE) as avg_data_value 
+            FROM cps_00004.places_county 
+            GROUP BY COUNTY_FIPS, MEASURE
+        ) 
+        as inside
+    
+    JOIN cps_00004.state_fips
+    ON cps_00004.state_fips.STATE_NAME = inside.STATE_NAME
+    WHERE MEASURE LIKE '%${measure}%'
+`}
+
+function requestLinearRegression() {
+    try {
+        if(income_metric.value !== 'none' && health_metric.value !== 'none') {
+            if(income_metric.value == 'agi') {
+                let pairs: [number, number][] = pickData().map(mun => [mun.properties.avg_agi, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+                socket.value.emit('linear_regression', pairs, `AGI vs ${health_metric.value}`)
+            } 
+            if(income_metric.value == 'gini') {
+                let pairs: [number, number][] = pickData().map(mun => [mun.properties.gini, mun.properties.health_metrics.get(health_metric.value)] ).filter((pair) => pair[0] !== NaN && pair[1] !== NaN)
+                socket.value.emit('linear_regression', pairs, `GINI vs ${health_metric.value}`)
+            }
+        }
+    } catch (err) {
+        console.log(err)
+    }
+}
 
 onMounted(() => {
     let query = `
@@ -1015,24 +1090,9 @@ onMounted(() => {
     GROUP BY cps_00004.income_tax.STATEFIPS
     `
 
-    let health_county_query = `
-    SELECT COUNTY_FIPS, MEASURE as measure, avg(DATA_VALUE) as avg_data_value 
-    FROM cps_00004.places_county 
-    WHERE MEASURE LIKE '%heart%' OR MEASURE LIKE '%Cancer%' OR MEASURE LIKE '%teeth%' OR MEASURE LIKE '%dentist%' OR MEASURE LIKE '%Fair or poor self-rated health status among adults%' OR MEASURE LIKE '%Stroke among adults aged%'
-    GROUP BY COUNTY_FIPS, MEASURE
-    `
-
-    let health_state_query = `
-    SELECT STATE_FIPS, MEASURE, avg_data_value
-    FROM (
-            SELECT any(STATE_NAME) as STATE_NAME, MEASURE, avg(DATA_VALUE) as avg_data_value 
-            FROM cps_00004.places_county 
-            WHERE MEASURE LIKE '%heart%' OR MEASURE LIKE '%Cancer%' OR MEASURE LIKE '%teeth%' OR MEASURE LIKE '%dentist%' OR MEASURE LIKE '%Fair or poor self-rated health status among adults%' OR MEASURE LIKE '%Stroke among adults aged%'
-            GROUP BY COUNTY_FIPS, MEASURE
-        ) 
-        as inside
-    JOIN cps_00004.state_fips
-    ON cps_00004.state_fips.STATE_NAME = inside.STATE_NAME
+    let health_metric_query = `
+    SELECT DISTINCT MEASURE 
+    FROM cps_00004.places_county
     `
 
     socket.value.on('data', (data) => {
@@ -1142,19 +1202,22 @@ onMounted(() => {
                 if(reduced.has(sc_fips)) {
                     let county_map = reduced.get(sc_fips) as [string, number]
                     c.properties.health_metrics = county_map
-                    Array.from(county_map.keys()).forEach((measure) => {
-                        health_metric_options.value.add(measure)
-                    })
+                    
                 }
                 return c
             })
             county_fill.value = with_health
-            // if(level.value === "counties") {
-            //     updatePlot()
-            // }
-            ruralUrbanCodes()
+            if(level.value === "counties") {
+                requestLinearRegression()
+                updatePlot()
+            }
+            // ruralUrbanCodes()
         }
-
+        if(data['name'] === 'health_metric_options') {
+            data['data'].forEach((measure) => {
+                health_metric_options.value.add(measure[0])
+            })
+        }
         if(data['name'] === 'health_state') {
             let reduced = data['data'].reduce(
                 (acc: Map<number, Map<string, number>>, row: any[]) => { 
@@ -1169,6 +1232,7 @@ onMounted(() => {
                     acc.set(state_fips, state_map)
                     return acc  
                 }, new Map<number, Map<string, number>>())
+
             let with_health = state_fill.value.map((s) => {
                 let s_fips = Number(s.id)
 
@@ -1191,6 +1255,11 @@ onMounted(() => {
                 return s
             })
             state_fill.value = with_health
+            if(level.value == 'states') {
+                requestLinearRegression()
+                updatePlot()
+            }
+            
         }
 
     })
@@ -1226,8 +1295,9 @@ onMounted(() => {
         socket.value.emit('query', query, "county")
         socket.value.emit('query', county_agi, "county_agi")
         socket.value.emit('query', state_agi, "state_agi")
-        socket.value.emit('query', health_county_query, 'health_county')
-        socket.value.emit('query', health_state_query, 'health_state')
+        socket.value.emit('query', health_metric_query, 'health_metric_options')
+        // socket.value.emit('query', health_county_query, 'health_county')
+        // socket.value.emit('query', health_state_query, 'health_state')
     })
     
     
@@ -1244,6 +1314,9 @@ function updateIncomeMetric(e: Event) {
     let im = e.target.value
     income_metric.value = im
     updatePlot()
+    
+    
+    
 }
 
 function colorAllMouseDown() {
@@ -1261,6 +1334,22 @@ function colorAllMouseUp() {
 function updatePlotLevel() {
     updatePlot(true)
 }
+
+function updateHealthMetric(e: Event) {
+    let hm = e.target.value
+    health_metric.value = hm
+    socket.value.emit('query', health_state_query(health_metric.value), 'health_state')
+    socket.value.emit('query', health_county_query(health_metric.value), 'health_county')
+    
+    
+}
+
+onUnmounted(() => {
+    if (socket.value) {
+        socket.value.disconnect(); 
+        socket.value = null;
+    }
+})
 </script>
 <template>
     <div class="row">
@@ -1319,7 +1408,7 @@ function updatePlotLevel() {
                         
                         <div class="row">
                             <p>Health Metric:</p>
-                            <select class="form-select" v-model="health_metric" @click="updatePlot">
+                            <select class="form-select" v-model="health_metric" @click="updateHealthMetric">
                                 <option v-for="metric in Array.from(health_metric_options.values())" :value="metric">{{ metric }}</option>
                             </select>
                         </div>
@@ -1523,7 +1612,7 @@ function updatePlotLevel() {
                     <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="health-metrics" >
                     <div class="accordion-body">
                         <div v-if="display_stats">
-                            <div id="stats-title">
+                            <div class="fw-bold" id="stats-title">
                                 {{ stats_title }}
                             </div>
                             <div id="covariance">
@@ -1531,6 +1620,13 @@ function updatePlotLevel() {
                             </div>
                             <div id="correlation_coef">
                                 {{ stats_corr }}
+                            </div>
+                        </div>
+
+
+                        <div v-if="cluster !== 'none'">
+                            <div id="box_plot">
+
                             </div>
                         </div>
                     </div>

@@ -171,7 +171,9 @@ def neighboring(low_income_perc, high_income_perc):
             'pnp': renamed_pnp.rows(),
             'rnr': renamed_rnr.rows(),
             'pnr': renamed_pnr.rows(),
-            'rnp': renamed_rnp.rows()
+            'rnp': renamed_rnp.rows(),
+            'poor': poor,
+            'rich': rich
         }
     )
 
@@ -219,7 +221,7 @@ from sklearn.covariance import EmpiricalCovariance
 import numpy as np
 
 @socketio.on('linear_regression')
-def linear_reg(pairs):
+def linear_reg(pairs, name):
     try: 
 
         pairs = [p for p in pairs if p[0] and p[1]]
@@ -229,7 +231,7 @@ def linear_reg(pairs):
 
         cov = EmpiricalCovariance().fit(X, y)
 
-        emit('linear_regression_result', {'data': {'correlation_coef': reg.score(X, y), 'covariance': cov.covariance_[0, 0]}, 'error': False})
+        emit('linear_regression_result', {'data': {'correlation_coef': reg.score(X, y), 'covariance': cov.covariance_[0, 0]}, 'error': False, 'name': name})
     except Exception:
         emit('linear_regression_result', {'data': {'correlation_coef': 0.0, 'covariance': 0.0}, 'error': True})
 

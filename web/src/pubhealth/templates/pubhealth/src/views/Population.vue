@@ -7,7 +7,7 @@ import {Library} from '@observablehq/stdlib'
 import { io, Socket } from "socket.io-client";
 
 let domain = `localhost`
-let port = 9001
+let port = 9002
 
 interface ClientToServer {
     query: (query: string, name: string) => string
@@ -176,8 +176,8 @@ let maxRadius = 10
 let numClusters = 10
 let clusterPadding = 20
 let padding = 5
-let height = 500
-let width = 750
+let height = 700
+let width = 1000
 let radius = d3.scaleLinear().domain([0, 10]).range([3, maxRadius])
 // let color = d3.scaleOrdinal(d3.schemeCategory10)
 
@@ -187,9 +187,12 @@ let clusters = ref({})
 
 const DEFAULT_SIZE = 3
 
+let all_health_metrics: Set<string> = ref(new Set())
+let size_metric = ref('All teeth lost among adults aged >=65 years')
+
 let nodesFn = () => {
   const noClusterNodes = datapoints.value.map((c: County) => {
-    let health_value: number = c.health_metrics.get('All teeth lost among adults aged >=65 years')
+    let health_value: number = c.health_metrics.get(size_metric.value)
     
     return {
       id: c.rucc,
@@ -286,7 +289,7 @@ let collide = (alpha: any) => {
   };
 }
 
-let size_metric = ref('All teeth lost among adults aged >=65 years')
+
 
 function createPlot() {
   
@@ -338,6 +341,7 @@ function createPlot() {
 
   nodes.value = nodesFn()
   clusters.value = clustersFn()
+  
   let chart = () => {
         const svg = d3.select(DOM.svg(width, height)).attr("id", "chart");
         const line = d3.line().curve(d3.curveBasisClosed);
@@ -494,6 +498,7 @@ onMounted(() => {
         data['data'].forEach((row) => {
           let [fips, measure, data_value] = row
           county_data.value.addHealthMetric(fips, measure, data_value)
+          all_health_metrics.value.add(measure)
         })
 
         // create the plot once we process the last batch of data for this query
@@ -520,6 +525,11 @@ onMounted(() => {
     
 
 })
+
+function updatePlot() {
+  document.getElementById("plot").innerHTML = ''
+  createPlot()
+}
 </script>
 <template>
     <div class="row">
@@ -538,7 +548,9 @@ onMounted(() => {
         </div>
         <div id="secondary" class="my-3 row">
           <div>
-            {{ county_data.sizeMetric }}
+            <select v-model="size_metric" @change="updatePlot" class="form-control">
+                <option v-for="choice in Array.from(all_health_metrics.values())" >{{ choice }}</option>
+            </select>
           </div>
           <div v-for="elem in county_data.sizeLegend" class="align-middle align-text-middle my-2">
             
